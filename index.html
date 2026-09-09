@@ -122,13 +122,65 @@
     background:var(--panel-2); border-radius:6px; display:none; white-space:pre-wrap;
   }
   .log-full.open{display:block;}
+
+  /* goals */
+  .goal{
+    background:var(--panel); border-radius:10px; padding:14px; margin-bottom:10px;
+    border-left:3px solid var(--warn);
+  }
+  .goal-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+  .goal-title{font-size:14px; font-weight:600;}
+  .goal-cat{font-size:11px; color:var(--text-dim); margin-top:2px;}
+  .goal-progress{font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:6px;}
+  .goal-del{color:var(--text-dim); cursor:pointer; font-size:16px; line-height:1; padding:0 4px;}
+  .goal-del:hover{color:var(--danger);}
+
+  .plan-option{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; margin-top:10px; cursor:pointer;
+  }
+  .plan-option:hover{border-color:var(--accent);}
+  .plan-option-label{font-size:13px; font-weight:600;}
+  .plan-option-rationale{font-size:11px; color:var(--text-dim); margin-top:2px;}
+  .plan-option-steps{font-size:11px; color:var(--text-dim); margin-top:6px; padding-left:14px;}
+  .plan-option-steps li{margin-top:2px;}
+  .plan-pick-btn{
+    margin-top:8px; background:var(--accent); color:#fff; border:none; border-radius:6px;
+    padding:6px 10px; font-size:11px; cursor:pointer;
+  }
+
+  .step-row{
+    display:flex; align-items:flex-start; gap:8px; margin-top:8px; font-size:13px;
+  }
+  .step-row input[type=checkbox]{margin-top:3px; width:auto; flex-shrink:0;}
+  .step-text{flex:1; cursor:text;}
+  .step-text.done{color:var(--text-dim); text-decoration:line-through;}
+  .step-text input{
+    width:100%; background:var(--panel-2); border:1px solid var(--accent); border-radius:4px;
+    color:var(--text); padding:3px 6px; font-size:13px; font-family:inherit;
+  }
+  .step-del{color:var(--text-dim); cursor:pointer; font-size:14px; flex-shrink:0;}
+  .step-del:hover{color:var(--danger);}
+  .add-step-row{display:flex; gap:6px; margin-top:10px;}
+  .add-step-row input{
+    flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    color:var(--text); padding:6px 8px; font-size:12px;
+  }
+
+  #newGoalForm{display:none; margin-top:10px;}
+  #newGoalForm.open{display:block;}
+  #newGoalForm select{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    color:var(--text); padding:8px 10px; font-size:13px; margin-bottom:8px;
+  }
+  #newGoalForm textarea{min-height:50px;}
 </style>
 </head>
 <body>
 
 <header>
   <h1>LiFE RPG — Core</h1>
-  <p>Скелет v0.1 · без прайм-тайма, эффективности и магазина — только разбор квеста в XP</p>
+  <p>Скелет v0.3 · GitHub-синк со слиянием по id · долгосрочные цели</p>
 </header>
 
 <main>
@@ -175,6 +227,21 @@
   <section>
     <h2>Character sheet</h2>
     <div id="categories"></div>
+  </section>
+
+
+  <section>
+    <h2>Долгосрочные цели <button class="ghost" id="newGoalBtn" style="float:right; margin-top:-4px;">+ Новая цель</button></h2>
+    <div id="newGoalForm">
+      <select id="newGoalCategory"></select>
+      <textarea id="newGoalText" placeholder="Опиши цель своими словами — так, как её видишь"></textarea>
+      <div class="row">
+        <button class="primary" id="generatePlanBtn" style="margin-top:8px;">Сгенерировать варианты плана</button>
+        <button class="ghost" id="cancelNewGoalBtn">Отмена</button>
+      </div>
+      <div id="goalPlanStatus" class="status"></div>
+    </div>
+    <div id="goals"></div>
   </section>
 
   <section>
@@ -228,23 +295,67 @@ const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-
 - Не придумывай категории, которых нет в character_sheet.
 - Никаких фиктивных наград, предметов, "лута" — только числа по схеме.`;
 
+const GOAL_PLANNER_PROMPT = `Ты помогаешь разбить долгосрочную цель игрока на конкретные шаги для RPG-геймификации жизни.
+
+Вход — JSON с полями: category (id, name, вес) и goal_text (текст цели игрока, своими словами).
+
+Верни СТРОГО JSON без какого-либо текста до или после, по схеме:
+{
+  "plan_options": [
+    {
+      "label": "<короткое название подхода, до 6 слов>",
+      "rationale": "<одно предложение, почему этот путь имеет смысл>",
+      "steps": [
+        { "text": "<конкретный шаг>", "contribution_factor": <число 0.1-1.0> }
+      ]
+    }
+  ]
+}
+
+Правила:
+- Дай 2-3 РАЗНЫХ по стратегии варианта — не переформулировки одного и того же пути, а разные подходы (например разный темп, разный порядок приоритетов, разный тип усилия).
+- Каждый шаг — конкретное действие, а не абстрактное намерение.
+- 3-7 шагов на вариант.
+- Без жёстких дедлайнов и дат — просто осмысленная последовательность.
+- contribution_factor — насколько именно этот шаг продвигает цель (0.1-1.0), оценивай честно.`;
+
 let state = {
   categories: [
-    { id: "health",        name: "Здоровье",         weight: 20, level: 1, current_xp: 0, xp_to_next_level: 100 },
-    { id: "learning",      name: "Обучение",         weight: 15, level: 1, current_xp: 0, xp_to_next_level: 100 },
-    { id: "sport",         name: "Спорт",            weight: 10, level: 1, current_xp: 0, xp_to_next_level: 100 },
-    { id: "relationships", name: "Отношения",        weight: 8,  level: 1, current_xp: 0, xp_to_next_level: 100 },
-    { id: "programming",   name: "Программирование", weight: 5,  level: 1, current_xp: 0, xp_to_next_level: 100 }
+    { id: "health",        name: "Здоровье",         weight: 20 },
+    { id: "learning",      name: "Обучение",         weight: 15 },
+    { id: "sport",         name: "Спорт",            weight: 10 },
+    { id: "relationships", name: "Отношения",        weight: 8 },
+    { id: "programming",   name: "Программирование", weight: 5 }
   ],
-  history: []
+  history: [],
+  goals: []
 };
 
-function getTemplatesForCategory(catName) {
+// XP/уровень категории — всегда ВЫЧИСЛЯЮТСЯ из history, никогда не хранятся напрямую.
+// Это то, что делает слияние с других устройств безопасным: нет двух версий числа,
+// есть только объединение списка событий.
+function genId() {
+  return 'x_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+function deriveLevel(totalXp) {
+  let level = 1, threshold = 100, remaining = totalXp;
+  while (remaining >= threshold) {
+    remaining -= threshold;
+    level += 1;
+    threshold = Math.round(threshold * 1.15);
+  }
+  return { level, current_xp: remaining, xp_to_next_level: threshold };
+}
+function getCategoryTotalXp(catId) {
+  return state.history.filter(h => h.category_id === catId).reduce((s, h) => s + (h.final_xp || 0), 0);
+}
+
+function getTemplatesForCategory(catId) {
   const seen = new Set();
   const result = [];
   for (let i = state.history.length - 1; i >= 0; i--) {
     const h = state.history[i];
-    if (h.category_name === catName) {
+    if (h.category_id === catId) {
       const t = h.full_text || h.text;
       if (!seen.has(t)) {
         seen.add(t);
@@ -263,18 +374,20 @@ function escapeAttr(s) {
 function renderCategories() {
   const el = document.getElementById('categories');
   el.innerHTML = state.categories.map(c => {
-    const pct = Math.min(100, Math.round((c.current_xp / c.xp_to_next_level) * 100));
-    const templates = getTemplatesForCategory(c.name);
+    const totalXp = getCategoryTotalXp(c.id);
+    const { level, current_xp, xp_to_next_level } = deriveLevel(totalXp);
+    const pct = Math.min(100, Math.round((current_xp / xp_to_next_level) * 100));
+    const templates = getTemplatesForCategory(c.id);
     const chipsHtml = templates.map(t =>
       `<span class="chip" data-text="${escapeAttr(t)}">${escapeAttr(t.length > 30 ? t.slice(0, 30) + '…' : t)}</span>`
     ).join('');
     return `
-      <div class="cat" data-cat="${c.name}">
+      <div class="cat" data-cat="${c.id}">
         <div class="cat-top">
           <span class="cat-name">${c.name}</span>
           <span class="cat-weight">вес ${c.weight}</span>
         </div>
-        <div class="cat-meta">Ур. ${c.level} · ${c.current_xp} / ${c.xp_to_next_level} XP</div>
+        <div class="cat-meta">Ур. ${level} · ${current_xp} / ${xp_to_next_level} XP</div>
         <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
         ${templates.length ? `<div class="chips">${chipsHtml}</div>` : ''}
       </div>`;
@@ -303,12 +416,14 @@ function renderHistory() {
     el.innerHTML = `<div class="empty">Пока пусто — запиши первое действие выше.</div>`;
     return;
   }
-  el.innerHTML = state.history.slice().reverse().slice(0, 30).map((h, i) => `
+  el.innerHTML = state.history.slice().reverse().slice(0, 30).map((h, i) => {
+    const cat = state.categories.find(c => c.id === h.category_id);
+    return `
     <div class="log-item" style="flex-direction:column;">
       <div style="display:flex; justify-content:space-between; width:100%; gap:10px;">
         <div style="flex:1;">
           <div class="log-text">${h.text}</div>
-          <div class="log-cat">${h.category_name}</div>
+          <div class="log-cat">${cat ? cat.name : h.category_id}</div>
         </div>
         <div class="log-xp">+${h.final_xp}</div>
       </div>
@@ -316,8 +431,8 @@ function renderHistory() {
         <span class="log-toggle" data-idx="${i}">показать полностью</span>
         <div class="log-full" id="full-${i}">${h.full_text}</div>
       ` : ''}
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   el.querySelectorAll('.log-toggle').forEach(t => {
     t.addEventListener('click', () => {
@@ -327,14 +442,6 @@ function renderHistory() {
       t.textContent = box.classList.contains('open') ? 'скрыть' : 'показать полностью';
     });
   });
-}
-
-function applyLevelUp(cat) {
-  while (cat.current_xp >= cat.xp_to_next_level) {
-    cat.current_xp -= cat.xp_to_next_level;
-    cat.level += 1;
-    cat.xp_to_next_level = Math.round(cat.xp_to_next_level * 1.15);
-  }
 }
 
 async function callGameMaster(playerText) {
@@ -406,13 +513,12 @@ async function handleSubmit() {
     }
 
     const finalXp = Math.round(result.base_xp * cat.weight * result.contribution_factor);
-    cat.current_xp += finalXp;
-    applyLevelUp(cat);
 
     state.history.push({
+      id: genId(),
       text: result.new_quest_text || text,
       full_text: text,
-      category_name: cat.name,
+      category_id: cat.id,
       final_xp: finalXp,
       quest_type: result.quest_type,
       timestamp: new Date().toISOString()
@@ -478,15 +584,84 @@ async function githubFetchFile(cfg) {
   return res.json();
 }
 
+// Слияние по id: объединяем локальный и удалённый список, дублей по id не остаётся.
+function mergeById(localArr, remoteArr) {
+  const map = new Map();
+  (remoteArr || []).forEach(x => map.set(x.id, x));
+  (localArr || []).forEach(x => map.set(x.id, x));
+  return Array.from(map.values());
+}
+
+// Категории — конфиг (веса это твоё решение): объединяем по id, локальная версия выигрывает при конфликте полей.
+function mergeCategories(localCats, remoteCats) {
+  const map = new Map();
+  (remoteCats || []).forEach(c => map.set(c.id, c));
+  (localCats || []).forEach(c => map.set(c.id, c));
+  return Array.from(map.values());
+}
+
+// Цели — объединяем по id, а внутри каждой совпавшей цели ещё и шаги по id;
+// если шаг помечен done хоть на одном устройстве — считаем его done.
+function mergeGoals(localGoals, remoteGoals) {
+  const map = new Map();
+  (remoteGoals || []).forEach(g => map.set(g.id, g));
+  (localGoals || []).forEach(g => {
+    const existing = map.get(g.id);
+    if (!existing) { map.set(g.id, g); return; }
+    if (g.status === 'planning' || existing.status === 'planning') {
+      map.set(g.id, g.status === 'planning' ? existing : g);
+      return;
+    }
+    const stepMap = new Map();
+    (existing.steps || []).forEach(s => stepMap.set(s.id, s));
+    (g.steps || []).forEach(s => {
+      const prev = stepMap.get(s.id);
+      if (prev && (prev.status === 'done' || s.status === 'done')) {
+        stepMap.set(s.id, Object.assign({}, s, { status: 'done' }));
+      } else {
+        stepMap.set(s.id, s);
+      }
+    });
+    const mergedSteps = Array.from(stepMap.values());
+    map.set(g.id, Object.assign({}, g, {
+      steps: mergedSteps,
+      status: mergedSteps.every(s => s.status === 'done') ? 'done' : 'active'
+    }));
+  });
+  return Array.from(map.values());
+}
+
+function mergeState(localState, remoteState) {
+  return {
+    categories: mergeCategories(localState.categories, remoteState.categories),
+    history: mergeById(localState.history, remoteState.history),
+    goals: mergeGoals(localState.goals, remoteState.goals)
+  };
+}
+
 async function githubSaveState() {
   const ghStatus = document.getElementById('ghStatus');
   const cfg = getGhConfig();
   if (!cfg.token || !cfg.repo) throw new Error('Заполни токен и репозиторий в настройках.');
 
   ghStatus.className = 'status';
-  ghStatus.textContent = 'Сохраняю в GitHub...';
+  ghStatus.textContent = 'Сверяю с GitHub...';
 
   const existing = await githubFetchFile(cfg);
+
+  if (existing) {
+    const decoded = fromBase64Unicode(existing.content.replace(/\n/g, ''));
+    let remoteState;
+    try { remoteState = JSON.parse(decoded); }
+    catch (e) { throw new Error('Файл в репозитории повреждён — открой его руками и проверь.'); }
+    state = mergeState(state, remoteState);
+    renderCategories();
+    renderHistory();
+    renderGoals();
+    saveState();
+  }
+
+  ghStatus.textContent = 'Сохраняю в GitHub...';
   const url = `https://api.github.com/repos/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
   const body = {
     message: `life-rpg: обновление ${new Date().toISOString()}`,
@@ -503,10 +678,15 @@ async function githubSaveState() {
     },
     body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`GitHub API вернул ошибку ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    if (res.status === 409 || res.status === 422) {
+      throw new Error('Кто-то успел сохранить между твоей проверкой и записью — попробуй "Сохранить" ещё раз, слияние подхватит и это.');
+    }
+    throw new Error(`GitHub API вернул ошибку ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
 
   ghStatus.className = 'status ok';
-  ghStatus.textContent = `Сохранено в GitHub (${new Date().toLocaleTimeString()})`;
+  ghStatus.textContent = `Слито и сохранено в GitHub (${new Date().toLocaleTimeString()})`;
 }
 
 async function githubLoadState() {
@@ -518,19 +698,21 @@ async function githubLoadState() {
   ghStatus.textContent = 'Загружаю из GitHub...';
 
   const file = await githubFetchFile(cfg);
-  if (!file) throw new Error('Файл ещё не существует в репозитории — сначала сохрани сохранение из этого устройства.');
+  if (!file) throw new Error('Файл ещё не существует в репозитории — сначала сохрани с этого устройства.');
 
   const decoded = fromBase64Unicode(file.content.replace(/\n/g, ''));
-  const loaded = JSON.parse(decoded);
-  if (!loaded.categories) throw new Error('Файл в репозитории повреждён или не тот формат.');
+  let remoteState;
+  try { remoteState = JSON.parse(decoded); }
+  catch (e) { throw new Error('Файл в репозитории повреждён или не тот формат.'); }
 
-  state = loaded;
+  state = mergeState(state, remoteState);
   renderCategories();
   renderHistory();
+  renderGoals();
   saveState();
 
   ghStatus.className = 'status ok';
-  ghStatus.textContent = `Загружено из GitHub (${new Date().toLocaleTimeString()})`;
+  ghStatus.textContent = `Слито с версией из GitHub (${new Date().toLocaleTimeString()})`;
 }
 
 function saveState() {
@@ -647,9 +829,273 @@ document.getElementById('importFile').addEventListener('change', (e) => {
   reader.readAsText(file);
 });
 
+/* ---------- Долгосрочные цели ---------- */
+
+function genGoalId() {
+  return 'g_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function populateGoalCategorySelect() {
+  const sel = document.getElementById('newGoalCategory');
+  sel.innerHTML = state.categories.map(c => `<option value="${c.id}">${c.name} (вес ${c.weight})</option>`).join('');
+}
+
+document.getElementById('newGoalBtn').addEventListener('click', () => {
+  populateGoalCategorySelect();
+  document.getElementById('newGoalForm').classList.add('open');
+});
+document.getElementById('cancelNewGoalBtn').addEventListener('click', () => {
+  document.getElementById('newGoalForm').classList.remove('open');
+  document.getElementById('newGoalText').value = '';
+  document.getElementById('goalPlanStatus').textContent = '';
+});
+
+async function callGoalPlanner(category, goalText) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('modelName').value.trim();
+  if (!apiKey) throw new Error('Вставь API-ключ в настройках.');
+
+  const payload = {
+    systemInstruction: { parts: [{ text: GOAL_PLANNER_PROMPT }] },
+    contents: [{
+      role: "user",
+      parts: [{ text: JSON.stringify({ category: { id: category.id, name: category.name, weight: category.weight }, goal_text: goalText }) }]
+    }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.4 }
+  };
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API вернул ошибку ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error('Пустой ответ от модели.');
+  return JSON.parse(raw);
+}
+
+document.getElementById('generatePlanBtn').addEventListener('click', async () => {
+  const catId = document.getElementById('newGoalCategory').value;
+  const goalText = document.getElementById('newGoalText').value.trim();
+  const statusEl = document.getElementById('goalPlanStatus');
+  if (!goalText) return;
+
+  const cat = state.categories.find(c => c.id === catId);
+  statusEl.className = 'status';
+  statusEl.textContent = 'Генерирую варианты плана...';
+
+  try {
+    const result = await callGoalPlanner(cat, goalText);
+    const goal = {
+      id: genGoalId(),
+      category_id: cat.id,
+      title: goalText.length > 60 ? goalText.slice(0, 60) + '…' : goalText,
+      vision_text: goalText,
+      status: 'planning',
+      plan_options: result.plan_options || [],
+      steps: []
+    };
+    state.goals.push(goal);
+    saveState();
+    renderGoals();
+
+    document.getElementById('newGoalForm').classList.remove('open');
+    document.getElementById('newGoalText').value = '';
+    statusEl.textContent = '';
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = e.message;
+  }
+});
+
+function pickPlanOption(goalId, optionIndex) {
+  const goal = state.goals.find(g => g.id === goalId);
+  if (!goal) return;
+  const option = goal.plan_options[optionIndex];
+  goal.steps = option.steps.map(s => ({
+    id: genGoalId(),
+    text: s.text,
+    contribution_factor: s.contribution_factor,
+    status: 'pending'
+  }));
+  goal.status = 'active';
+  delete goal.plan_options;
+  saveState();
+  renderGoals();
+}
+
+function completeStep(goalId, stepId) {
+  const goal = state.goals.find(g => g.id === goalId);
+  if (!goal) return;
+  const step = goal.steps.find(s => s.id === stepId);
+  if (!step || step.status === 'done') return;
+
+  const cat = state.categories.find(c => c.id === goal.category_id);
+  const finalXp = Math.round(20 * cat.weight * step.contribution_factor);
+
+  step.status = 'done';
+  state.history.push({
+    id: genId(),
+    text: step.text,
+    full_text: `[Цель: ${goal.title}] ${step.text}`,
+    category_id: cat.id,
+    final_xp: finalXp,
+    quest_type: 'medium',
+    timestamp: new Date().toISOString()
+  });
+
+  if (goal.steps.every(s => s.status === 'done')) goal.status = 'done';
+
+  renderCategories();
+  renderHistory();
+  renderGoals();
+  saveState();
+}
+
+function deleteStep(goalId, stepId) {
+  const goal = state.goals.find(g => g.id === goalId);
+  if (!goal) return;
+  goal.steps = goal.steps.filter(s => s.id !== stepId);
+  saveState();
+  renderGoals();
+}
+
+function addStep(goalId, text) {
+  const goal = state.goals.find(g => g.id === goalId);
+  if (!goal || !text.trim()) return;
+  goal.steps.push({ id: genGoalId(), text: text.trim(), contribution_factor: 0.5, status: 'pending' });
+  if (goal.status === 'done') goal.status = 'active';
+  saveState();
+  renderGoals();
+}
+
+function editStepText(goalId, stepId, newText) {
+  const goal = state.goals.find(g => g.id === goalId);
+  if (!goal) return;
+  const step = goal.steps.find(s => s.id === stepId);
+  if (!step || !newText.trim()) { renderGoals(); return; }
+  step.text = newText.trim();
+  saveState();
+  renderGoals();
+}
+
+function deleteGoal(goalId) {
+  if (!confirm('Удалить эту цель и весь её план?')) return;
+  state.goals = state.goals.filter(g => g.id !== goalId);
+  saveState();
+  renderGoals();
+}
+
+function renderGoals() {
+  const el = document.getElementById('goals');
+  if (!state.goals || state.goals.length === 0) {
+    el.innerHTML = `<div class="empty">Пока нет долгосрочных целей — добавь через "+ Новая цель".</div>`;
+    return;
+  }
+
+  el.innerHTML = state.goals.map(g => {
+    const cat = state.categories.find(c => c.id === g.category_id);
+    const catName = cat ? cat.name : g.category_id;
+
+    if (g.status === 'planning') {
+      const optionsHtml = g.plan_options.map((opt, idx) => `
+        <div class="plan-option" data-goal="${g.id}" data-option="${idx}">
+          <div class="plan-option-label">${escapeAttr(opt.label)}</div>
+          <div class="plan-option-rationale">${escapeAttr(opt.rationale)}</div>
+          <ul class="plan-option-steps">${opt.steps.map(s => `<li>${escapeAttr(s.text)}</li>`).join('')}</ul>
+          <button class="plan-pick-btn" data-goal="${g.id}" data-option="${idx}">Выбрать этот путь</button>
+        </div>
+      `).join('');
+      return `
+        <div class="goal">
+          <div class="goal-top">
+            <div>
+              <div class="goal-title">${escapeAttr(g.title)}</div>
+              <div class="goal-cat">${catName} · выбери подход</div>
+            </div>
+            <span class="goal-del" data-goal="${g.id}">×</span>
+          </div>
+          ${optionsHtml}
+        </div>`;
+    }
+
+    const done = g.steps.filter(s => s.status === 'done').length;
+    const stepsHtml = g.steps.map(s => `
+      <div class="step-row" data-goal="${g.id}" data-step="${s.id}">
+        <input type="checkbox" ${s.status === 'done' ? 'checked disabled' : ''} data-goal="${g.id}" data-step="${s.id}" class="step-check">
+        <span class="step-text ${s.status === 'done' ? 'done' : ''}" data-goal="${g.id}" data-step="${s.id}">${escapeAttr(s.text)}</span>
+        ${s.status !== 'done' ? `<span class="step-del" data-goal="${g.id}" data-step="${s.id}">×</span>` : ''}
+      </div>
+    `).join('');
+
+    return `
+      <div class="goal">
+        <div class="goal-top">
+          <div>
+            <div class="goal-title">${escapeAttr(g.title)}</div>
+            <div class="goal-cat">${catName}${g.status === 'done' ? ' · цель достигнута' : ''}</div>
+          </div>
+          <span class="goal-del" data-goal="${g.id}">×</span>
+        </div>
+        <div class="goal-progress">${done} / ${g.steps.length} шагов</div>
+        ${stepsHtml}
+        <div class="add-step-row">
+          <input type="text" placeholder="+ добавить шаг" data-goal-add="${g.id}">
+        </div>
+      </div>`;
+  }).join('');
+
+  wireGoalEvents();
+}
+
+function wireGoalEvents() {
+  const el = document.getElementById('goals');
+
+  el.querySelectorAll('.plan-pick-btn').forEach(btn => {
+    btn.addEventListener('click', () => pickPlanOption(btn.dataset.goal, parseInt(btn.dataset.option, 10)));
+  });
+  el.querySelectorAll('.goal-del').forEach(x => {
+    x.addEventListener('click', () => deleteGoal(x.dataset.goal));
+  });
+  el.querySelectorAll('.step-check').forEach(cb => {
+    cb.addEventListener('change', () => completeStep(cb.dataset.goal, cb.dataset.step));
+  });
+  el.querySelectorAll('.step-del').forEach(x => {
+    x.addEventListener('click', () => deleteStep(x.dataset.goal, x.dataset.step));
+  });
+  el.querySelectorAll('.step-text').forEach(span => {
+    span.addEventListener('click', () => {
+      if (span.classList.contains('done')) return;
+      const goalId = span.dataset.goal, stepId = span.dataset.step;
+      const current = span.textContent;
+      span.innerHTML = `<input type="text" value="${escapeAttr(current)}">`;
+      const input = span.querySelector('input');
+      input.focus();
+      input.select();
+      const save = () => editStepText(goalId, stepId, input.value);
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+    });
+  });
+  el.querySelectorAll('[data-goal-add]').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && input.value.trim()) {
+        addStep(input.dataset.goalAdd, input.value);
+        input.value = '';
+      }
+    });
+  });
+}
+
 loadFromStorage();
 renderCategories();
 renderHistory();
+renderGoals();
 </script>
 </body>
 </html>
