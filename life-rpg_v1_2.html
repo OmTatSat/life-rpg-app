@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiFE RPG — Core</title>
+<style>
+  :root{
+    --bg: #12141a;
+    --panel: #1b1e27;
+    --panel-2: #20232e;
+    --line: #2a2e3a;
+    --text: #e7e8ed;
+    --text-dim: #8c90a0;
+    --accent: #6c7bff;
+    --good: #45b26b;
+    --warn: #e0a13c;
+    --danger: #e0574f;
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.45;
+    padding-bottom:60px;
+  }
+  header{
+    padding:22px 18px 14px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:flex-start;
+  }
+  header h1{
+    margin:0 0 4px; font-size:20px; font-weight:650; letter-spacing:-0.01em;
+  }
+  header p{margin:0; color:var(--text-dim); font-size:13px;}
+
+  main{max-width:640px; margin:0 auto; padding:18px;}
+
+  section{margin-bottom:26px;}
+  section > h2{
+    font-size:12px; text-transform:none; color:var(--text-dim);
+    margin:0 0 10px; font-weight:600;
+  }
+
+  /* settings */
+  #settings{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:14px;
+  }
+  #settings.collapsed .settings-body{display:none;}
+  #settings summary{cursor:pointer; font-size:13px; color:var(--text-dim); list-style:none; display:flex; justify-content:space-between; align-items:center;}
+  #settings summary::-webkit-details-marker{display:none;}
+  .field{margin-top:10px;}
+  .field label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;}
+  .field input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    color:var(--text); padding:8px 10px; font-size:13px; font-family:var(--mono);
+  }
+
+  /* category cards */
+  .cat{
+    background:var(--panel); border-radius:10px; padding:12px 14px; margin-bottom:8px;
+    border-left:3px solid var(--accent);
+  }
+  .cat-top{display:flex; justify-content:space-between; align-items:baseline;}
+  .cat-name{font-size:14px; font-weight:600;}
+  .cat-weight{font-family:var(--mono); font-size:11px; color:var(--text-dim);}
+  .cat-meta{font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:2px;}
+  .bar{
+    height:6px; background:var(--panel-2); border-radius:3px; margin-top:8px; overflow:hidden;
+  }
+  .bar-fill{height:100%; background:var(--accent); transition:width .4s ease;}
+  .cat{cursor:pointer;}
+  .chips{display:none; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .chips.open{display:flex;}
+  .chip{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:14px;
+    padding:5px 10px; font-size:11px; color:var(--text); cursor:pointer;
+  }
+  .chip:hover{border-color:var(--accent);}
+
+  /* logger */
+  textarea{
+    width:100%; min-height:70px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; color:var(--text); padding:12px; font-size:14px; resize:vertical;
+    font-family:inherit;
+  }
+  textarea:focus{outline:none; border-color:var(--accent);}
+  button.primary{
+    margin-top:8px; width:100%; background:var(--accent); color:#fff; border:none;
+    border-radius:10px; padding:12px; font-size:14px; font-weight:600; cursor:pointer;
+  }
+  button.primary:disabled{opacity:.5; cursor:default;}
+  button.ghost{
+    background:transparent; border:1px solid var(--line); color:var(--text-dim);
+    border-radius:8px; padding:8px 12px; font-size:12px; cursor:pointer;
+  }
+  .row{display:flex; gap:8px; margin-top:8px;}
+
+  .status{font-size:12px; margin-top:8px; color:var(--text-dim);}
+  .status.err{color:var(--danger);}
+  .status.ok{color:var(--good);}
+
+  .clarify{
+    background:var(--panel-2); border:1px solid var(--warn); border-radius:8px;
+    padding:10px 12px; margin-top:8px; font-size:13px;
+  }
+
+  /* history */
+  .log-item{
+    display:flex; justify-content:space-between; gap:10px;
+    padding:10px 0; border-bottom:1px solid var(--line); font-size:13px;
+  }
+  .log-item:last-child{border-bottom:none;}
+  .log-text{flex:1;}
+  .log-cat{color:var(--text-dim); font-size:11px;}
+  .log-xp{font-family:var(--mono); color:var(--good); white-space:nowrap;}
+  .empty{color:var(--text-dim); font-size:13px; padding:8px 0;}
+  .log-toggle{color:var(--accent); font-size:11px; cursor:pointer; margin-top:3px; display:inline-block;}
+  .log-full{
+    font-size:12px; color:var(--text-dim); margin-top:6px; padding:8px;
+    background:var(--panel-2); border-radius:6px; display:none; white-space:pre-wrap;
+  }
+  .log-full.open{display:block;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LiFE RPG — Core</h1>
+  <p>Скелет v0.1 · без прайм-тайма, эффективности и магазина — только разбор квеста в XP</p>
+</header>
+
+<main>
+
+  <details id="settings">
+    <summary>⚙ Настройки <span id="settingsHint" style="font-family:var(--mono);"></span></summary>
+    <div class="settings-body">
+      <div class="field">
+        <label>Gemini API key (сохраняется в этом браузере — не выкладывай файл с сохранённым ключом никому)</label>
+        <input type="password" id="apiKey" placeholder="AIza...">
+      </div>
+      <div class="field">
+        <label>Модель</label>
+        <input type="text" id="modelName" value="gemini-flash-lite-latest">
+      </div>
+      <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">
+        Ключ получить в Google AI Studio. Если модель отвечает ошибкой 404 — проверь актуальный id модели там же и поменяй тут.
+      </p>
+      <button class="ghost" id="forgetKeyBtn" style="margin-top:8px;">Забыть сохранённый ключ</button>
+
+      <p style="font-size:11px;color:var(--text-dim);margin-top:16px;border-top:1px solid var(--line);padding-top:12px;">
+        Синхронизация истории между устройствами через приватный GitHub-репозиторий.
+      </p>
+      <div class="field">
+        <label>GitHub Personal Access Token (fine-grained, доступ только к одному приватному репо)</label>
+        <input type="password" id="ghToken" placeholder="github_pat_...">
+      </div>
+      <div class="field">
+        <label>Репозиторий (формат: логин/название-репо)</label>
+        <input type="text" id="ghRepo" placeholder="myusername/life-rpg-data">
+      </div>
+      <div class="field">
+        <label>Путь к файлу в репозитории</label>
+        <input type="text" id="ghPath" value="state.json">
+      </div>
+      <div class="field" style="display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="ghAutoSync" style="width:auto;">
+        <label style="margin:0;">Автосохранение в GitHub после каждой записи</label>
+      </div>
+      <button class="ghost" id="forgetGhBtn" style="margin-top:8px;">Забыть GitHub-настройки</button>
+    </div>
+  </details>
+
+  <section>
+    <h2>Character sheet</h2>
+    <div id="categories"></div>
+  </section>
+
+  <section>
+    <h2>Что сделал?</h2>
+    <textarea id="input" placeholder="Например: потренировался 40 минут, было тяжело"></textarea>
+    <button class="primary" id="submitBtn">Записать</button>
+    <div id="status" class="status"></div>
+    <div id="clarify" class="clarify" style="display:none;"></div>
+  </section>
+
+  <section>
+    <h2>История</h2>
+    <div id="history"></div>
+  </section>
+
+  <section>
+    <div class="row">
+      <button class="ghost" id="exportBtn">Экспорт JSON</button>
+      <button class="ghost" id="importBtn">Импорт JSON</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+    </div>
+    <div class="row">
+      <button class="ghost" id="ghSaveBtn">☁ Сохранить в GitHub</button>
+      <button class="ghost" id="ghLoadBtn">☁ Загрузить из GitHub</button>
+    </div>
+    <div id="ghStatus" class="status"></div>
+  </section>
+
+</main>
+
+<script>
+const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-геймификации жизни игрока.
+
+Тебе на вход подаётся JSON с двумя полями: character_sheet (текущее состояние) и player_text (что игрок написал о том, что сделал).
+
+Верни СТРОГО JSON без какого-либо текста до или после, по такой схеме:
+{
+  "matched_category_id": "<id категории из character_sheet.categories, или null>",
+  "matched_quest_id": null,
+  "new_quest_text": "<короткая формулировка сделанного>",
+  "quest_type": "repeating | medium | vision",
+  "contribution_factor": <число 0.1-1.0>,
+  "base_xp": <5 | 15 | 30 | 60>,
+  "confidence": "high | medium | low",
+  "clarification_needed": "<вопрос игроку если confidence=low, иначе null>"
+}
+
+Правила:
+- Если текст не даёт понять, к какой категории это относится — верни confidence="low", matched_category_id=null и задай ОДИН короткий уточняющий вопрос.
+- contribution_factor оценивай честно: рутинное повторяющееся действие обычно 0.3-0.6, значимый шаг к цели — 0.7-1.0.
+- Не придумывай категории, которых нет в character_sheet.
+- Никаких фиктивных наград, предметов, "лута" — только числа по схеме.`;
+
+let state = {
+  categories: [
+    { id: "health",        name: "Здоровье",         weight: 20, level: 1, current_xp: 0, xp_to_next_level: 100 },
+    { id: "learning",      name: "Обучение",         weight: 15, level: 1, current_xp: 0, xp_to_next_level: 100 },
+    { id: "sport",         name: "Спорт",            weight: 10, level: 1, current_xp: 0, xp_to_next_level: 100 },
+    { id: "relationships", name: "Отношения",        weight: 8,  level: 1, current_xp: 0, xp_to_next_level: 100 },
+    { id: "programming",   name: "Программирование", weight: 5,  level: 1, current_xp: 0, xp_to_next_level: 100 }
+  ],
+  history: []
+};
+
+function getTemplatesForCategory(catName) {
+  const seen = new Set();
+  const result = [];
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    const h = state.history[i];
+    if (h.category_name === catName) {
+      const t = h.full_text || h.text;
+      if (!seen.has(t)) {
+        seen.add(t);
+        result.push(t);
+        if (result.length >= 5) break;
+      }
+    }
+  }
+  return result;
+}
+
+function escapeAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function renderCategories() {
+  const el = document.getElementById('categories');
+  el.innerHTML = state.categories.map(c => {
+    const pct = Math.min(100, Math.round((c.current_xp / c.xp_to_next_level) * 100));
+    const templates = getTemplatesForCategory(c.name);
+    const chipsHtml = templates.map(t =>
+      `<span class="chip" data-text="${escapeAttr(t)}">${escapeAttr(t.length > 30 ? t.slice(0, 30) + '…' : t)}</span>`
+    ).join('');
+    return `
+      <div class="cat" data-cat="${c.name}">
+        <div class="cat-top">
+          <span class="cat-name">${c.name}</span>
+          <span class="cat-weight">вес ${c.weight}</span>
+        </div>
+        <div class="cat-meta">Ур. ${c.level} · ${c.current_xp} / ${c.xp_to_next_level} XP</div>
+        <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+        ${templates.length ? `<div class="chips">${chipsHtml}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  el.querySelectorAll('.cat').forEach(catEl => {
+    catEl.addEventListener('click', (e) => {
+      if (e.target.classList.contains('chip')) return;
+      const chips = catEl.querySelector('.chips');
+      if (chips) chips.classList.toggle('open');
+    });
+  });
+  el.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const input = document.getElementById('input');
+      input.value = chip.dataset.text;
+      input.focus();
+    });
+  });
+}
+
+function renderHistory() {
+  const el = document.getElementById('history');
+  if (state.history.length === 0) {
+    el.innerHTML = `<div class="empty">Пока пусто — запиши первое действие выше.</div>`;
+    return;
+  }
+  el.innerHTML = state.history.slice().reverse().slice(0, 30).map((h, i) => `
+    <div class="log-item" style="flex-direction:column;">
+      <div style="display:flex; justify-content:space-between; width:100%; gap:10px;">
+        <div style="flex:1;">
+          <div class="log-text">${h.text}</div>
+          <div class="log-cat">${h.category_name}</div>
+        </div>
+        <div class="log-xp">+${h.final_xp}</div>
+      </div>
+      ${h.full_text && h.full_text !== h.text ? `
+        <span class="log-toggle" data-idx="${i}">показать полностью</span>
+        <div class="log-full" id="full-${i}">${h.full_text}</div>
+      ` : ''}
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.log-toggle').forEach(t => {
+    t.addEventListener('click', () => {
+      const idx = t.dataset.idx;
+      const box = document.getElementById(`full-${idx}`);
+      box.classList.toggle('open');
+      t.textContent = box.classList.contains('open') ? 'скрыть' : 'показать полностью';
+    });
+  });
+}
+
+function applyLevelUp(cat) {
+  while (cat.current_xp >= cat.xp_to_next_level) {
+    cat.current_xp -= cat.xp_to_next_level;
+    cat.level += 1;
+    cat.xp_to_next_level = Math.round(cat.xp_to_next_level * 1.15);
+  }
+}
+
+async function callGameMaster(playerText) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('modelName').value.trim();
+  if (!apiKey) throw new Error('Вставь API-ключ в настройках.');
+
+  const payload = {
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{
+      role: "user",
+      parts: [{ text: JSON.stringify({ character_sheet: { categories: state.categories }, player_text: playerText }) }]
+    }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0 }
+  };
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API вернул ошибку ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error('Пустой ответ от модели — попробуй ещё раз.');
+
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch (e) { throw new Error('Модель вернула не-JSON: ' + raw.slice(0, 200)); }
+
+  return parsed;
+}
+
+async function handleSubmit() {
+  const input = document.getElementById('input');
+  const statusEl = document.getElementById('status');
+  const clarifyEl = document.getElementById('clarify');
+  const btn = document.getElementById('submitBtn');
+  const text = input.value.trim();
+  if (!text) return;
+
+  btn.disabled = true;
+  statusEl.className = 'status';
+  statusEl.textContent = 'Спрашиваю game master\'а...';
+  clarifyEl.style.display = 'none';
+
+  try {
+    const result = await callGameMaster(text);
+
+    if (result.confidence === 'low' || !result.matched_category_id) {
+      clarifyEl.style.display = 'block';
+      clarifyEl.textContent = result.clarification_needed || 'Не понял, к какой категории это относится — уточни?';
+      statusEl.textContent = '';
+      btn.disabled = false;
+      return;
+    }
+
+    const cat = state.categories.find(c => c.id === result.matched_category_id);
+    if (!cat) {
+      statusEl.className = 'status err';
+      statusEl.textContent = `Категория "${result.matched_category_id}" не найдена в character sheet.`;
+      btn.disabled = false;
+      return;
+    }
+
+    const finalXp = Math.round(result.base_xp * cat.weight * result.contribution_factor);
+    cat.current_xp += finalXp;
+    applyLevelUp(cat);
+
+    state.history.push({
+      text: result.new_quest_text || text,
+      full_text: text,
+      category_name: cat.name,
+      final_xp: finalXp,
+      quest_type: result.quest_type,
+      timestamp: new Date().toISOString()
+    });
+
+    renderCategories();
+    renderHistory();
+    saveState();
+    input.value = '';
+    statusEl.className = 'status ok';
+    statusEl.textContent = `Записано: +${finalXp} XP → ${cat.name}`;
+
+    if (document.getElementById('ghAutoSync').checked) {
+      const ghStatus = document.getElementById('ghStatus');
+      try {
+        await githubSaveState();
+      } catch (e) {
+        ghStatus.className = 'status err';
+        ghStatus.textContent = `Автосохранение не удалось: ${e.message}`;
+      }
+    }
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+const LS_KEY_API = 'liferpg_apikey';
+const LS_KEY_MODEL = 'liferpg_model';
+const LS_KEY_STATE = 'liferpg_state';
+const LS_KEY_GH_TOKEN = 'liferpg_gh_token';
+const LS_KEY_GH_REPO = 'liferpg_gh_repo';
+const LS_KEY_GH_PATH = 'liferpg_gh_path';
+const LS_KEY_GH_AUTOSYNC = 'liferpg_gh_autosync';
+
+function toBase64Unicode(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function fromBase64Unicode(str) {
+  return decodeURIComponent(escape(atob(str)));
+}
+
+function getGhConfig() {
+  return {
+    token: document.getElementById('ghToken').value.trim(),
+    repo: document.getElementById('ghRepo').value.trim(),
+    path: document.getElementById('ghPath').value.trim() || 'state.json'
+  };
+}
+
+async function githubFetchFile(cfg) {
+  const url = `https://api.github.com/repos/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': 'application/vnd.github+json'
+    }
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub API вернул ошибку ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
+}
+
+async function githubSaveState() {
+  const ghStatus = document.getElementById('ghStatus');
+  const cfg = getGhConfig();
+  if (!cfg.token || !cfg.repo) throw new Error('Заполни токен и репозиторий в настройках.');
+
+  ghStatus.className = 'status';
+  ghStatus.textContent = 'Сохраняю в GitHub...';
+
+  const existing = await githubFetchFile(cfg);
+  const url = `https://api.github.com/repos/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
+  const body = {
+    message: `life-rpg: обновление ${new Date().toISOString()}`,
+    content: toBase64Unicode(JSON.stringify(state, null, 2)),
+  };
+  if (existing && existing.sha) body.sha = existing.sha;
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`GitHub API вернул ошибку ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  ghStatus.className = 'status ok';
+  ghStatus.textContent = `Сохранено в GitHub (${new Date().toLocaleTimeString()})`;
+}
+
+async function githubLoadState() {
+  const ghStatus = document.getElementById('ghStatus');
+  const cfg = getGhConfig();
+  if (!cfg.token || !cfg.repo) throw new Error('Заполни токен и репозиторий в настройках.');
+
+  ghStatus.className = 'status';
+  ghStatus.textContent = 'Загружаю из GitHub...';
+
+  const file = await githubFetchFile(cfg);
+  if (!file) throw new Error('Файл ещё не существует в репозитории — сначала сохрани сохранение из этого устройства.');
+
+  const decoded = fromBase64Unicode(file.content.replace(/\n/g, ''));
+  const loaded = JSON.parse(decoded);
+  if (!loaded.categories) throw new Error('Файл в репозитории повреждён или не тот формат.');
+
+  state = loaded;
+  renderCategories();
+  renderHistory();
+  saveState();
+
+  ghStatus.className = 'status ok';
+  ghStatus.textContent = `Загружено из GitHub (${new Date().toLocaleTimeString()})`;
+}
+
+function saveState() {
+  localStorage.setItem(LS_KEY_STATE, JSON.stringify(state));
+}
+
+function loadFromStorage() {
+  const savedKey = localStorage.getItem(LS_KEY_API);
+  const savedModel = localStorage.getItem(LS_KEY_MODEL);
+  const savedState = localStorage.getItem(LS_KEY_STATE);
+  if (savedKey) document.getElementById('apiKey').value = savedKey;
+  if (savedModel) document.getElementById('modelName').value = savedModel;
+  if (savedState) {
+    try {
+      const parsed = JSON.parse(savedState);
+      if (parsed.categories) state = parsed;
+    } catch (e) { /* ignore corrupt state, keep defaults */ }
+  }
+
+  const savedGhToken = localStorage.getItem(LS_KEY_GH_TOKEN);
+  const savedGhRepo = localStorage.getItem(LS_KEY_GH_REPO);
+  const savedGhPath = localStorage.getItem(LS_KEY_GH_PATH);
+  const savedGhAutoSync = localStorage.getItem(LS_KEY_GH_AUTOSYNC);
+  if (savedGhToken) document.getElementById('ghToken').value = savedGhToken;
+  if (savedGhRepo) document.getElementById('ghRepo').value = savedGhRepo;
+  if (savedGhPath) document.getElementById('ghPath').value = savedGhPath;
+  if (savedGhAutoSync === 'true') document.getElementById('ghAutoSync').checked = true;
+}
+
+document.getElementById('apiKey').addEventListener('input', (e) => {
+  localStorage.setItem(LS_KEY_API, e.target.value);
+});
+document.getElementById('modelName').addEventListener('input', (e) => {
+  localStorage.setItem(LS_KEY_MODEL, e.target.value);
+});
+document.getElementById('forgetKeyBtn').addEventListener('click', () => {
+  localStorage.removeItem(LS_KEY_API);
+  document.getElementById('apiKey').value = '';
+});
+
+document.getElementById('ghToken').addEventListener('input', (e) => {
+  localStorage.setItem(LS_KEY_GH_TOKEN, e.target.value);
+});
+document.getElementById('ghRepo').addEventListener('input', (e) => {
+  localStorage.setItem(LS_KEY_GH_REPO, e.target.value);
+});
+document.getElementById('ghPath').addEventListener('input', (e) => {
+  localStorage.setItem(LS_KEY_GH_PATH, e.target.value);
+});
+document.getElementById('ghAutoSync').addEventListener('change', (e) => {
+  localStorage.setItem(LS_KEY_GH_AUTOSYNC, e.target.checked ? 'true' : 'false');
+});
+document.getElementById('forgetGhBtn').addEventListener('click', () => {
+  [LS_KEY_GH_TOKEN, LS_KEY_GH_REPO, LS_KEY_GH_PATH, LS_KEY_GH_AUTOSYNC].forEach(k => localStorage.removeItem(k));
+  document.getElementById('ghToken').value = '';
+  document.getElementById('ghRepo').value = '';
+  document.getElementById('ghPath').value = 'state.json';
+  document.getElementById('ghAutoSync').checked = false;
+});
+
+document.getElementById('ghSaveBtn').addEventListener('click', async () => {
+  const ghStatus = document.getElementById('ghStatus');
+  try {
+    await githubSaveState();
+  } catch (e) {
+    ghStatus.className = 'status err';
+    ghStatus.textContent = e.message;
+  }
+});
+document.getElementById('ghLoadBtn').addEventListener('click', async () => {
+  const ghStatus = document.getElementById('ghStatus');
+  try {
+    await githubLoadState();
+  } catch (e) {
+    ghStatus.className = 'status err';
+    ghStatus.textContent = e.message;
+  }
+});
+
+document.getElementById('submitBtn').addEventListener('click', handleSubmit);
+document.getElementById('input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit();
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `life-rpg-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const loaded = JSON.parse(ev.target.result);
+      if (!loaded.categories) throw new Error('bad shape');
+      state = loaded;
+      renderCategories();
+      renderHistory();
+      saveState();
+    } catch (err) {
+      alert('Не получилось прочитать файл — проверь, это тот же формат JSON.');
+    }
+  };
+  reader.readAsText(file);
+});
+
+loadFromStorage();
+renderCategories();
+renderHistory();
+</script>
+</body>
+</html>
