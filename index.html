@@ -1204,6 +1204,7 @@ function wireGoalEvents() {
   el.querySelectorAll('.step-text').forEach(span => {
     span.addEventListener('click', () => {
       if (span.classList.contains('done')) return;
+      if (span.querySelector('input')) return;
       const goalId = span.dataset.goal, stepId = span.dataset.step;
       const current = span.textContent;
       span.innerHTML = `<input type="text" value="${escapeAttr(current)}">`;
