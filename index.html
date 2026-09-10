@@ -884,7 +884,11 @@ function loadFromStorage() {
   if (savedState) {
     try {
       const parsed = JSON.parse(savedState);
-      if (parsed.categories) state = parsed;
+      if (parsed.categories) {
+        parsed.goals = parsed.goals || [];
+        parsed.supplements_log = parsed.supplements_log || [];
+        state = parsed;
+      }
     } catch (e) { /* ignore corrupt state, keep defaults */ }
   }
 
