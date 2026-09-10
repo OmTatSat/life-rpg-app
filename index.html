@@ -125,6 +125,26 @@
   }
   .log-full.open{display:block;}
 
+  /* motivators */
+  .motivator-side{ display:none; }
+  @media (min-width: 900px){
+    .motivator-side{
+      display:block; position:fixed; top:50%; transform:translateY(-50%);
+      width:180px; font-size:12px; color:var(--text-dim); line-height:1.5;
+      opacity:0; transition:opacity 1s ease; pointer-events:none;
+    }
+    .motivator-side.visible{opacity:1;}
+    .motivator-side.left{left:28px;}
+    .motivator-side.right{right:28px; text-align:right;}
+  }
+  .motivator-source{font-size:10px; color:var(--line); margin-top:6px; font-family:var(--mono);}
+  .cat-motivator{
+    display:none; font-size:11px; color:var(--text-dim); font-style:italic;
+    margin-top:8px; padding-top:8px; border-top:1px solid var(--line);
+  }
+  .cat-motivator.visible{display:block;}
+  .cat-motivator .motivator-source{margin-top:3px;}
+
   /* goals */
   .goal{
     background:var(--panel); border-radius:10px; padding:14px; margin-bottom:10px;
@@ -213,9 +233,12 @@
 </head>
 <body>
 
+<div class="motivator-side left" id="motivatorLeft"><div class="motivator-text"></div><div class="motivator-source"></div></div>
+<div class="motivator-side right" id="motivatorRight"><div class="motivator-text"></div><div class="motivator-source"></div></div>
+
 <header>
   <h1>LiFE RPG — Core</h1>
-  <p>Скелет v0.4 · лог добавок · брейншторм-диалог с AI</p>
+  <p>Скелет v0.5 · библиотека мотиваторов (общие в фоне + по категориям)</p>
 </header>
 
 <main>
@@ -326,14 +349,19 @@ const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-
 
 Тебе на вход подаётся JSON с двумя полями: character_sheet (текущее состояние) и player_text (что игрок написал о том, что сделал).
 
+Игрок часто описывает ОДНИМ сообщением сразу НЕСКОЛЬКО разных вещей, которые относятся к разным категориям (например: "сходил на тренировку, потом почитал книгу по программированию и позвонил маме" — это Здоровье + Обучение + Отношения). Твоя задача — разобрать текст на отдельные достижения и для КАЖДОГО подобрать свою категорию и свой XP, а не сводить всё к одной.
+
 Верни СТРОГО JSON без какого-либо текста до или после, по такой схеме:
 {
-  "matched_category_id": "<id категории из character_sheet.categories, или null>",
-  "matched_quest_id": null,
-  "new_quest_text": "<короткая формулировка сделанного>",
-  "quest_type": "repeating | medium | vision",
-  "contribution_factor": <число 0.1-1.0>,
-  "base_xp": <5 | 15 | 30 | 60>,
+  "matches": [
+    {
+      "matched_category_id": "<id категории из character_sheet.categories>",
+      "new_quest_text": "<короткая формулировка ИМЕННО этой части сделанного, 1 фраза>",
+      "quest_type": "repeating | medium | vision",
+      "contribution_factor": <число 0.1-1.0>,
+      "base_xp": <5 | 15 | 30 | 60>
+    }
+  ],
   "confidence": "high | medium | low",
   "clarification_needed": "<вопрос игроку если confidence=low, иначе null>",
   "supplements": [
@@ -342,11 +370,15 @@ const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-
 }
 
 Правила:
-- Если текст не даёт понять, к какой категории это относится — верни confidence="low", matched_category_id=null и задай ОДИН короткий уточняющий вопрос.
-- contribution_factor оценивай честно: рутинное повторяющееся действие обычно 0.3-0.6, значимый шаг к цели — 0.7-1.0.
+- Если в тексте несколько разных действий, относящихся к разным категориям — верни несколько объектов в matches, по одному на каждую категорию. Не объединяй разнородные действия в один пункт ради простоты.
+- Если всё описанное — по сути одно действие в одной категории — верни matches из одного объекта, как раньше.
+- Каждый matched_category_id должен встречаться в matches не больше одного раза — если несколько мелких вещей относятся к одной категории, объедини их формулировку в один объект.
+- Если текст совсем не даёт понять, к какой категории (или категориям) это относится — верни confidence="low", matches=[] и задай ОДИН короткий уточняющий вопрос.
+- Если только ЧАСТЬ текста непонятна, а остальное разобрать можно — верни то, что понятно, в matches с confidence="medium", а в clarification_needed уточни только непонятный кусок (её можно будет доиграть следующим сообщением).
+- contribution_factor оценивай честно и для каждого пункта отдельно: рутинное повторяющееся действие обычно 0.3-0.6, значимый шаг к цели — 0.7-1.0.
 - Не придумывай категории, которых нет в character_sheet.
 - Никаких фиктивных наград, предметов, "лута" — только числа по схеме.
-- supplements: вытащи ВСЁ, что игрок принял (витамины, минералы, растения, лекарства, кофеин и т.п.), с дозой если она названа. Если ничего такого в тексте нет — верни пустой массив []. Это отдельный фактический лог, к XP не имеет отношения.`;
+- supplements: вытащи ВСЁ, что игрок принял (витамины, минералы, растения, лекарства, кофеин и т.п.), с дозой если она названа. Если ничего такого в тексте нет — верни пустой массив []. Это отдельный фактический лог, общий на всё сообщение, к XP не имеет отношения.`;
 
 const GOAL_PLANNER_PROMPT = `Ты помогаешь разбить долгосрочную цель игрока на конкретные шаги для RPG-геймификации жизни.
 
@@ -487,6 +519,7 @@ function renderCategories() {
         <div class="cat-meta">Ур. ${level} · ${current_xp} / ${xp_to_next_level} XP</div>
         <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
         ${templates.length ? `<div class="chips">${chipsHtml}</div>` : ''}
+        <div class="cat-motivator" id="catmot-${c.id}"><div class="motivator-text"></div><div class="motivator-source"></div></div>
       </div>`;
   }).join('');
 
@@ -495,6 +528,13 @@ function renderCategories() {
       if (e.target.classList.contains('chip')) return;
       const chips = catEl.querySelector('.chips');
       if (chips) chips.classList.toggle('open');
+      const catId = catEl.dataset.cat;
+      const motEl = document.getElementById(`catmot-${catId}`);
+      if (motEl) {
+        const willOpen = !chips || chips.classList.contains('open');
+        if (willOpen) showNextCategoryMotivator(catId, motEl);
+        else motEl.classList.remove('visible');
+      }
     });
   });
   el.querySelectorAll('.chip').forEach(chip => {
@@ -633,8 +673,9 @@ async function handleSubmit() {
 
   try {
     const result = await callGameMaster(text);
+    const matches = Array.isArray(result.matches) ? result.matches : [];
 
-    if (result.confidence === 'low' || !result.matched_category_id) {
+    if (result.confidence === 'low' || matches.length === 0) {
       clarifyEl.style.display = 'block';
       clarifyEl.textContent = result.clarification_needed || 'Не понял, к какой категории это относится — уточни?';
       statusEl.textContent = '';
@@ -642,28 +683,35 @@ async function handleSubmit() {
       return;
     }
 
-    const cat = state.categories.find(c => c.id === result.matched_category_id);
-    if (!cat) {
+    const ts = new Date().toISOString();
+    const summaryParts = [];
+    const skippedCats = [];
+
+    matches.forEach(m => {
+      const cat = state.categories.find(c => c.id === m.matched_category_id);
+      if (!cat) { skippedCats.push(m.matched_category_id); return; }
+
+      const finalXp = Math.round(m.base_xp * cat.weight * m.contribution_factor);
+      state.history.push({
+        id: genId(),
+        text: m.new_quest_text || text,
+        full_text: text,
+        category_id: cat.id,
+        final_xp: finalXp,
+        quest_type: m.quest_type,
+        timestamp: ts
+      });
+      summaryParts.push(`+${finalXp} XP → ${cat.name}`);
+    });
+
+    if (summaryParts.length === 0) {
       statusEl.className = 'status err';
-      statusEl.textContent = `Категория "${result.matched_category_id}" не найдена в character sheet.`;
+      statusEl.textContent = `Категории не найдены в character sheet: ${skippedCats.join(', ')}`;
       btn.disabled = false;
       return;
     }
 
-    const finalXp = Math.round(result.base_xp * cat.weight * result.contribution_factor);
-
-    state.history.push({
-      id: genId(),
-      text: result.new_quest_text || text,
-      full_text: text,
-      category_id: cat.id,
-      final_xp: finalXp,
-      quest_type: result.quest_type,
-      timestamp: new Date().toISOString()
-    });
-
     if (Array.isArray(result.supplements) && result.supplements.length > 0) {
-      const ts = new Date().toISOString();
       result.supplements.forEach(s => {
         state.supplements_log.push({
           id: genId(),
@@ -682,7 +730,9 @@ async function handleSubmit() {
     saveState();
     input.value = '';
     statusEl.className = 'status ok';
-    statusEl.textContent = `Записано: +${finalXp} XP → ${cat.name}`;
+    statusEl.textContent = skippedCats.length > 0
+      ? `Записано: ${summaryParts.join(', ')} (пропущено: ${skippedCats.join(', ')})`
+      : `Записано: ${summaryParts.join(', ')}`;
 
     if (document.getElementById('ghAutoSync').checked) {
       const ghStatus = document.getElementById('ghStatus');
@@ -1468,6 +1518,94 @@ function wireGoalEvents() {
     });
   });
 }
+
+/* ---------- Библиотека мотиваторов ---------- */
+// Каждый мотиватор честно отражает механизм, а не преувеличивает исход.
+// source — техника/автор, на которой формулировка держится, не декоративная подпись.
+
+const MOTIVATORS_GENERAL = [
+  { text: "Малое действие всё же двигает счётчик — большие рывки не обязательны.", source: "поведенческая активация" },
+  { text: "Мотивация обычно приходит после начала, а не до него.", source: "поведенческая активация" },
+  { text: "Незакрытая задача занимает голову больше, чем закрытая — даже маленькая.", source: "эффект Зейгарник" },
+  { text: "Прошлые мелкие победы — не повод для хайпа, а реальное доказательство, что получалось.", source: "self-efficacy, Bandura" },
+  { text: "Не «я не умею», а «я пока не умею — следующий шаг известен».", source: "growth mindset + self-efficacy" },
+  { text: "Сорвался — это данные, не приговор. Важно, что делаешь дальше.", source: "self-compassion, Neff" },
+  { text: "Что бы ты сказал другу с этой же мыслью?", source: "self-distancing, Kross" },
+  { text: "Дискомфорт от начала почти всегда меньше, чем кажется до начала.", source: "поведенческая активация" },
+  { text: "Ты не теряешь время отдыха — ты не бесконечно откладываешь то, что сам выбрал важным.", source: "prospect theory / reframe" },
+  { text: "Фокус на том, что реально в твоей власти прямо сейчас.", source: "дихотомия контроля, стоицизм" },
+  { text: "Каждое действие — крошечное голосование за то, каким человеком себя видишь.", source: "identity-based habits" },
+  { text: "Не обязательно хотеть — достаточно начать, и захочется по ходу.", source: "поведенческая активация" }
+];
+
+const MOTIVATORS_BY_CATEGORY = {
+  health: [
+    { text: "Тело — это база, на которой держится всё остальное сегодня.", source: "" },
+    { text: "Маленькая забота о теле сейчас — это меньше кортизола потом.", source: "HPA-ось" },
+    { text: "Не нужно идеально — нужно чуть лучше, чем если бы ты не делал ничего.", source: "поведенческая активация" }
+  ],
+  learning: [
+    { text: "Каждый час обучения сейчас — это опция, которой не было вчера.", source: "" },
+    { text: "Не всё должно быть понятно с первого раза — это и есть процесс.", source: "growth mindset" },
+    { text: "Знание, которое пригодится не сразу, всё равно копится.", source: "" }
+  ],
+  sport: [
+    { text: "Тело помнит движение дольше, чем кажется в моменте лени.", source: "" },
+    { text: "Не про рекорд сегодня — про то, что счётчик не на нуле.", source: "" },
+    { text: "Даже слабая тренировка — это не пропущенная тренировка.", source: "" }
+  ],
+  relationships: [
+    { text: "Внимание, которое ты дал сегодня, не обязано быть длинным, чтобы быть настоящим.", source: "" },
+    { text: "Спросить как дела — маленькое действие с несоразмерно большим эффектом.", source: "" },
+    { text: "Связь держится на частоте касаний, не только на глубине разговоров.", source: "" }
+  ],
+  programming: [
+    { text: "Хобби не обязано быть продуктивным, чтобы быть законным.", source: "" },
+    { text: "Даже неэффективное время в этом — всё ещё крупица навыка.", source: "" },
+    { text: "Разрешить себе — не то же самое, что потерять контроль.", source: "" }
+  ]
+};
+
+let lastGeneralMotivatorText = null;
+const categoryMotivatorIndex = {};
+
+function pickRandomGeneralMotivator() {
+  let choice;
+  do {
+    choice = MOTIVATORS_GENERAL[Math.floor(Math.random() * MOTIVATORS_GENERAL.length)];
+  } while (MOTIVATORS_GENERAL.length > 1 && choice.text === lastGeneralMotivatorText);
+  lastGeneralMotivatorText = choice.text;
+  return choice;
+}
+
+function fillMotivatorEl(el, m) {
+  el.querySelector('.motivator-text').textContent = m.text;
+  el.querySelector('.motivator-source').textContent = m.source ? '— ' + m.source : '';
+}
+
+function rotateSideMotivators() {
+  ['motivatorLeft', 'motivatorRight'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('visible');
+    setTimeout(() => {
+      fillMotivatorEl(el, pickRandomGeneralMotivator());
+      el.classList.add('visible');
+    }, 700);
+  });
+}
+
+function showNextCategoryMotivator(catId, motEl) {
+  const pool = MOTIVATORS_BY_CATEGORY[catId];
+  if (!pool || pool.length === 0) { motEl.classList.remove('visible'); return; }
+  const idx = (categoryMotivatorIndex[catId] || 0) % pool.length;
+  categoryMotivatorIndex[catId] = idx + 1;
+  fillMotivatorEl(motEl, pool[idx]);
+  motEl.classList.add('visible');
+}
+
+setInterval(rotateSideMotivators, 60000);
+setTimeout(rotateSideMotivators, 400);
 
 loadFromStorage();
 renderCategories();
