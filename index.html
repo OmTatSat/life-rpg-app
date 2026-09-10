@@ -189,13 +189,33 @@
     color:var(--text); padding:8px 10px; font-size:13px; margin-bottom:8px;
   }
   #newGoalForm textarea{min-height:50px;}
+
+  /* brainstorm */
+  .bs-msg{margin-bottom:10px; max-width:90%;}
+  .bs-user{margin-left:auto; text-align:right;}
+  .bs-bubble{
+    display:inline-block; padding:9px 12px; border-radius:10px; font-size:13px; text-align:left;
+  }
+  .bs-user .bs-bubble{background:var(--accent); color:#fff;}
+  .bs-model .bs-bubble{background:var(--panel); border:1px solid var(--line);}
+  .bs-suggestions{margin-top:6px; display:flex; flex-direction:column; gap:6px;}
+  .bs-suggestion{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-size:12px;
+  }
+  .bs-suggestion-text{font-weight:600;}
+  .bs-suggestion-rationale{color:var(--text-dim); margin-top:2px;}
+  .bs-suggestion-use{
+    margin-top:6px; background:var(--accent); color:#fff; border:none; border-radius:6px;
+    padding:5px 10px; font-size:11px; cursor:pointer;
+  }
 </style>
 </head>
 <body>
 
 <header>
   <h1>LiFE RPG — Core</h1>
-  <p>Скелет v0.3 · GitHub-синк со слиянием по id · долгосрочные цели</p>
+  <p>Скелет v0.4 · лог добавок · брейншторм-диалог с AI</p>
 </header>
 
 <main>
@@ -267,9 +287,23 @@
     <div id="clarify" class="clarify" style="display:none;"></div>
   </section>
 
+
+  <section>
+    <h2>Брейншторм <button class="ghost" id="bsResetBtn" style="float:right; margin-top:-4px;">Сначала</button></h2>
+    <div id="brainstormLog"></div>
+    <textarea id="brainstormInput" placeholder="Спроси, что сейчас целесообразно, или просто напиши мысль"></textarea>
+    <button class="primary" id="brainstormSendBtn">Спросить</button>
+    <div id="brainstormStatus" class="status"></div>
+  </section>
+
   <section>
     <h2>История</h2>
     <div id="history"></div>
+  </section>
+
+  <section>
+    <h2>Добавки</h2>
+    <div id="supplements"></div>
   </section>
 
   <section>
@@ -301,14 +335,18 @@ const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-
   "contribution_factor": <число 0.1-1.0>,
   "base_xp": <5 | 15 | 30 | 60>,
   "confidence": "high | medium | low",
-  "clarification_needed": "<вопрос игроку если confidence=low, иначе null>"
+  "clarification_needed": "<вопрос игроку если confidence=low, иначе null>",
+  "supplements": [
+    { "name": "<название добавки/вещества>", "dose_amount": <число или null>, "dose_unit": "<мг|г|мл|шт|null>", "context": "<для чего упомянул, если сказал — иначе null>" }
+  ]
 }
 
 Правила:
 - Если текст не даёт понять, к какой категории это относится — верни confidence="low", matched_category_id=null и задай ОДИН короткий уточняющий вопрос.
 - contribution_factor оценивай честно: рутинное повторяющееся действие обычно 0.3-0.6, значимый шаг к цели — 0.7-1.0.
 - Не придумывай категории, которых нет в character_sheet.
-- Никаких фиктивных наград, предметов, "лута" — только числа по схеме.`;
+- Никаких фиктивных наград, предметов, "лута" — только числа по схеме.
+- supplements: вытащи ВСЁ, что игрок принял (витамины, минералы, растения, лекарства, кофеин и т.п.), с дозой если она названа. Если ничего такого в тексте нет — верни пустой массив []. Это отдельный фактический лог, к XP не имеет отношения.`;
 
 const GOAL_PLANNER_PROMPT = `Ты помогаешь разбить долгосрочную цель игрока на конкретные шаги для RPG-геймификации жизни.
 
@@ -358,6 +396,25 @@ const PLAN_REFINE_PROMPT = `Ты дорабатываешь ОДИН конкр�
 - Без жёстких дедлайнов и дат.
 - contribution_factor оценивай честно.`;
 
+const BRAINSTORM_PROMPT = `Ты помогаешь игроку находить целесообразные следующие шаги в его RPG-геймификации жизни, видя контекст целиком.
+
+На первом сообщении диалога придёт JSON с полями: context (character_sheet с текущими уровнями по категориям, recent_history — последние события, active_goals — активные цели с шагами) и player_message — что игрок написал/спросил. На последующих сообщениях приходит просто текст игрока — используй контекст и историю диалога, переданные ранее.
+
+Верни СТРОГО JSON без текста до/после:
+{
+  "message": "<ответ игроку простым текстом — обсуждение, аргументы, реакция на то что он написал>",
+  "suggested_quests": [
+    { "text": "<конкретное предлагаемое действие>", "category_id": "<id категории из context>", "quest_type": "repeating|medium|vision", "contribution_factor": <0.1-1.0>, "base_xp": <5|15|30|60>, "rationale": "<почему целесообразно сейчас, коротко>" }
+  ]
+}
+
+Правила:
+- Смотри на реальные сигналы: категория отстаёт по уровню относительно своего веса, застрявшие шаги в активных целях, давно не было записей в какой-то сфере.
+- 0-3 suggested_quests за раз, не вываливай много сразу.
+- Игрок может оспорить, попросить другое, сузить тему — веди себя как партнёр по обсуждению, а не как автомат, выдающий советы.
+- Не придумывай category_id, которых нет в context.
+- Если игрок просто рассуждает и конкретика не нужна — верни suggested_quests: [] и ответь по существу в message.`;
+
 let state = {
   categories: [
     { id: "health",        name: "Здоровье",         weight: 20 },
@@ -367,7 +424,8 @@ let state = {
     { id: "programming",   name: "Программирование", weight: 5 }
   ],
   history: [],
-  goals: []
+  goals: [],
+  supplements_log: []
 };
 
 // XP/уровень категории — всегда ВЫЧИСЛЯЮТСЯ из history, никогда не хранятся напрямую.
@@ -456,6 +514,29 @@ function deleteHistoryEntry(origIdx) {
   saveState();
   renderCategories();
   renderHistory();
+}
+
+function renderSupplements() {
+  const el = document.getElementById('supplements');
+  if (!state.supplements_log || state.supplements_log.length === 0) {
+    el.innerHTML = `<div class="empty">Пока пусто — упомяни добавку в записи, и она попадёт сюда автоматически.</div>`;
+    return;
+  }
+  const sorted = state.supplements_log.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 50);
+  el.innerHTML = sorted.map(s => {
+    const dose = s.dose_amount ? `${s.dose_amount}${s.dose_unit ? ' ' + s.dose_unit : ''}` : '';
+    const when = new Date(s.timestamp).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="log-item">
+        <div style="display:flex; justify-content:space-between; width:100%; gap:10px;">
+          <div style="flex:1;">
+            <div class="log-text">${escapeAttr(s.name)}${s.context ? ` <span class="log-cat">· ${escapeAttr(s.context)}</span>` : ''}</div>
+            <div class="log-cat">${when}</div>
+          </div>
+          <div class="log-xp" style="color:var(--text-dim);">${dose}</div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function renderHistory() {
@@ -581,6 +662,21 @@ async function handleSubmit() {
       timestamp: new Date().toISOString()
     });
 
+    if (Array.isArray(result.supplements) && result.supplements.length > 0) {
+      const ts = new Date().toISOString();
+      result.supplements.forEach(s => {
+        state.supplements_log.push({
+          id: genId(),
+          name: s.name,
+          dose_amount: s.dose_amount ?? null,
+          dose_unit: s.dose_unit ?? null,
+          context: s.context ?? null,
+          timestamp: ts
+        });
+      });
+      renderSupplements();
+    }
+
     renderCategories();
     renderHistory();
     saveState();
@@ -692,7 +788,8 @@ function mergeState(localState, remoteState) {
   return {
     categories: mergeCategories(localState.categories, remoteState.categories),
     history: mergeById(localState.history, remoteState.history),
-    goals: mergeGoals(localState.goals, remoteState.goals)
+    goals: mergeGoals(localState.goals, remoteState.goals),
+    supplements_log: mergeById(localState.supplements_log, remoteState.supplements_log)
   };
 }
 
@@ -715,6 +812,7 @@ async function githubSaveState() {
     renderCategories();
     renderHistory();
     renderGoals();
+    renderSupplements();
     saveState();
   }
 
@@ -766,6 +864,7 @@ async function githubLoadState() {
   renderCategories();
   renderHistory();
   renderGoals();
+  renderSupplements();
   saveState();
 
   ghStatus.className = 'status ok';
@@ -875,15 +974,155 @@ document.getElementById('importFile').addEventListener('change', (e) => {
     try {
       const loaded = JSON.parse(ev.target.result);
       if (!loaded.categories) throw new Error('bad shape');
+      loaded.goals = loaded.goals || [];
+      loaded.supplements_log = loaded.supplements_log || [];
       state = loaded;
       renderCategories();
       renderHistory();
+      renderGoals();
+      renderSupplements();
       saveState();
     } catch (err) {
       alert('Не получилось прочитать файл — проверь, это тот же формат JSON.');
     }
   };
   reader.readAsText(file);
+});
+
+/* ---------- Брейншторм ---------- */
+
+let brainstormMessages = []; // сессионный чат, не персистится в state
+
+function buildBrainstormContext() {
+  const categories = state.categories.map(c => {
+    const { level, current_xp, xp_to_next_level } = deriveLevel(getCategoryTotalXp(c.id));
+    return { id: c.id, name: c.name, weight: c.weight, level, current_xp, xp_to_next_level };
+  });
+  const recentHistory = state.history.slice(-15).map(h => ({
+    category_id: h.category_id, text: h.text, final_xp: h.final_xp, timestamp: h.timestamp
+  }));
+  const activeGoals = state.goals.filter(g => g.status === 'active').map(g => ({
+    title: g.title, category_id: g.category_id,
+    steps: g.steps.map(s => ({ text: s.text, status: s.status }))
+  }));
+  return { character_sheet: { categories }, recent_history: recentHistory, active_goals: activeGoals };
+}
+
+async function callBrainstorm(userText) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('modelName').value.trim();
+  if (!apiKey) throw new Error('Вставь API-ключ в настройках.');
+
+  const contents = [];
+  if (brainstormMessages.length === 0) {
+    contents.push({
+      role: 'user',
+      parts: [{ text: JSON.stringify({ context: buildBrainstormContext(), player_message: userText }) }]
+    });
+  } else {
+    brainstormMessages.forEach(m => {
+      contents.push({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] });
+    });
+    contents.push({ role: 'user', parts: [{ text: userText }] });
+  }
+
+  const payload = {
+    systemInstruction: { parts: [{ text: BRAINSTORM_PROMPT }] },
+    contents,
+    generationConfig: { responseMimeType: "application/json", temperature: 0.5 }
+  };
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API вернул ошибку ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error('Пустой ответ от модели.');
+  return JSON.parse(raw);
+}
+
+function renderBrainstorm() {
+  const el = document.getElementById('brainstormLog');
+  if (brainstormMessages.length === 0) {
+    el.innerHTML = `<div class="empty">Спроси что-то вроде "что сейчас важнее подтянуть?" — увидит статы, историю и активные цели.</div>`;
+    return;
+  }
+  el.innerHTML = brainstormMessages.map(m => {
+    const suggHtml = (m.suggestions && m.suggestions.length > 0) ? `
+      <div class="bs-suggestions">
+        ${m.suggestions.map((s, i) => `
+          <div class="bs-suggestion">
+            <div class="bs-suggestion-text">${escapeAttr(s.text)}</div>
+            <div class="bs-suggestion-rationale">${escapeAttr(s.rationale || '')}</div>
+            <button class="bs-suggestion-use" data-text="${escapeAttr(s.text)}">Использовать</button>
+          </div>
+        `).join('')}
+      </div>` : '';
+    return `
+      <div class="bs-msg bs-${m.role}">
+        <div class="bs-bubble">${escapeAttr(m.text)}</div>
+        ${suggHtml}
+      </div>`;
+  }).join('');
+
+  el.querySelectorAll('.bs-suggestion-use').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById('input');
+      input.value = btn.dataset.text;
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      input.focus();
+    });
+  });
+
+  el.scrollTop = el.scrollHeight;
+}
+
+async function handleBrainstormSend() {
+  const input = document.getElementById('brainstormInput');
+  const statusEl = document.getElementById('brainstormStatus');
+  const btn = document.getElementById('brainstormSendBtn');
+  const text = input.value.trim();
+  if (!text) return;
+
+  brainstormMessages.push({ role: 'user', text });
+  renderBrainstorm();
+  input.value = '';
+  btn.disabled = true;
+  statusEl.textContent = 'Думаю...';
+  statusEl.className = 'status';
+
+  try {
+    const result = await callBrainstorm(text);
+    brainstormMessages.push({
+      role: 'model',
+      text: result.message || '',
+      suggestions: result.suggested_quests || []
+    });
+    renderBrainstorm();
+    statusEl.textContent = '';
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = e.message;
+    brainstormMessages.pop(); // не оставляем зависший user-вопрос без ответа при ошибке
+    renderBrainstorm();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('brainstormSendBtn').addEventListener('click', handleBrainstormSend);
+document.getElementById('brainstormInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleBrainstormSend();
+});
+document.getElementById('bsResetBtn').addEventListener('click', () => {
+  brainstormMessages = [];
+  renderBrainstorm();
 });
 
 /* ---------- Долгосрочные цели ---------- */
@@ -1230,6 +1469,8 @@ loadFromStorage();
 renderCategories();
 renderHistory();
 renderGoals();
+renderSupplements();
+renderBrainstorm();
 </script>
 </body>
 </html>
