@@ -229,6 +229,74 @@
     margin-top:6px; background:var(--accent); color:#fff; border:none; border-radius:6px;
     padding:5px 10px; font-size:11px; cursor:pointer;
   }
+
+  /* seeds & artifacts */
+  .seed{
+    background:var(--panel); border-radius:10px; padding:14px; margin-bottom:10px;
+    border-left:3px solid #a06fd6;
+  }
+  .seed-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+  .seed-text{font-size:13px; font-weight:600;}
+  .seed-meta{font-size:11px; color:var(--text-dim); margin-top:2px;}
+  .seed-tag{
+    display:inline-block; font-size:10px; color:var(--text-dim); border:1px solid var(--line);
+    border-radius:10px; padding:1px 7px; margin-right:4px;
+  }
+  .seed-del{color:var(--text-dim); cursor:pointer; font-size:16px; line-height:1; padding:0 4px; flex-shrink:0;}
+  .seed-del:hover{color:var(--danger);}
+  .seed-quest-btn{
+    margin-top:10px; background:#a06fd6; color:#fff; border:none; border-radius:6px;
+    padding:6px 10px; font-size:11px; cursor:pointer;
+  }
+  .seed-quest-btn:disabled{opacity:.5; cursor:default;}
+  .seed-status-note{font-size:11px; color:var(--text-dim); margin-top:6px;}
+  .seed-status-note.err{color:var(--danger);}
+
+  .seed-opt{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; margin-top:10px;
+  }
+  .seed-opt:hover{border-color:#a06fd6;}
+  .seed-opt-label{font-size:13px; font-weight:600;}
+  .seed-opt-desc{font-size:12px; color:var(--text); margin-top:4px;}
+  .seed-opt-hyp{font-size:11px; color:var(--text-dim); margin-top:4px; font-style:italic;}
+  .seed-opt-pick{
+    margin-top:8px; background:#a06fd6; color:#fff; border:none; border-radius:6px;
+    padding:6px 10px; font-size:11px; cursor:pointer;
+  }
+
+  .seed-approach-box{
+    background:var(--panel-2); border-radius:8px; padding:10px 12px; margin-top:10px;
+  }
+  .seed-approach-label{font-size:13px; font-weight:600;}
+  .seed-approach-desc{font-size:12px; color:var(--text); margin-top:4px;}
+  .seed-approach-hyp{font-size:11px; color:var(--text-dim); margin-top:4px; font-style:italic;}
+  .seed-feedback{
+    font-size:12px; margin-top:10px; padding:8px 10px; border-radius:6px;
+    background:var(--panel-2); border-left:3px solid var(--warn);
+  }
+  .seed-result-input{margin-top:10px; min-height:50px;}
+  .seed-result-btn{
+    margin-top:6px; background:var(--accent); color:#fff; border:none; border-radius:6px;
+    padding:6px 10px; font-size:11px; cursor:pointer;
+  }
+  .seed-other-opts-btn{
+    margin-top:6px; margin-left:6px; background:transparent; color:var(--text-dim);
+    border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:11px; cursor:pointer;
+  }
+  .seed-artifact-link{
+    font-size:12px; color:var(--good); margin-top:8px;
+  }
+
+  .artifact{
+    background:var(--panel); border-radius:10px; padding:12px 14px; margin-bottom:8px;
+    border-left:3px solid var(--good);
+  }
+  .artifact-name{font-size:13px; font-weight:600;}
+  .artifact-desc{font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .artifact-meta{font-size:10px; color:var(--text-dim); margin-top:6px; font-family:var(--mono);}
+  .artifact-del{color:var(--text-dim); cursor:pointer; font-size:16px; line-height:1; padding:0 4px;}
+  .artifact-del:hover{color:var(--danger);}
 </style>
 </head>
 <body>
@@ -303,10 +371,24 @@
   </section>
 
   <section>
+    <h2>🌱 Зёрна, ожидающие трансмутации</h2>
+    <textarea id="seedInput" placeholder="Опиши затруднение, изъян, то что не получилось или повторяется..."></textarea>
+    <button class="primary" id="seedSubmitBtn">Сохранить как зерно</button>
+    <div id="seedStatus" class="status"></div>
+    <div id="seeds"></div>
+  </section>
+
+  <section>
+    <h2>🏺 Артефакты</h2>
+    <div id="artifacts"></div>
+  </section>
+
+  <section>
     <h2>Что сделал?</h2>
     <textarea id="input" placeholder="Например: потренировался 40 минут, было тяжело"></textarea>
     <button class="primary" id="submitBtn">Записать</button>
     <div id="status" class="status"></div>
+    <div id="artifactHint" class="seed-artifact-link"></div>
     <div id="clarify" class="clarify" style="display:none;"></div>
   </section>
 
@@ -347,7 +429,7 @@
 <script>
 const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-геймификации жизни игрока.
 
-Тебе на вход подаётся JSON с двумя полями: character_sheet (текущее состояние) и player_text (что игрок написал о том, что сделал).
+Тебе на вход подаётся JSON с двумя полями: character_sheet (текущее состояние, включая уже проверенные приёмы в artifacts) и player_text (что игрок написал о том, что сделал).
 
 Игрок часто описывает ОДНИМ сообщением сразу НЕСКОЛЬКО разных вещей, которые относятся к разным категориям (например: "сходил на тренировку, потом почитал книгу по программированию и позвонил маме" — это Здоровье + Обучение + Отношения). Твоя задача — разобрать текст на отдельные достижения и для КАЖДОГО подобрать свою категорию и свой XP, а не сводить всё к одной.
 
@@ -366,7 +448,9 @@ const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-
   "clarification_needed": "<вопрос игроку если confidence=low, иначе null>",
   "supplements": [
     { "name": "<название добавки/вещества>", "dose_amount": <число или null>, "dose_unit": "<мг|г|мл|шт|null>", "context": "<для чего упомянул, если сказал — иначе null>" }
-  ]
+  ],
+  "seed_detected": { "text": "<короткая, ёмкая формулировка изъяна/затруднения>", "category_id": "<id категории, если понятно, иначе null>" } | null,
+  "artifact_hint": { "artifact_id": "<id из character_sheet.artifacts>", "note": "<как этот приём может пригодиться именно сейчас, коротко>" } | null
 }
 
 Правила:
@@ -378,7 +462,9 @@ const SYSTEM_PROMPT = `Ты — Game Master для персональной RPG-
 - contribution_factor оценивай честно и для каждого пункта отдельно: рутинное повторяющееся действие обычно 0.3-0.6, значимый шаг к цели — 0.7-1.0.
 - Не придумывай категории, которых нет в character_sheet.
 - Никаких фиктивных наград, предметов, "лута" — только числа по схеме.
-- supplements: вытащи ВСЁ, что игрок принял (витамины, минералы, растения, лекарства, кофеин и т.п.), с дозой если она названа. Если ничего такого в тексте нет — верни пустой массив []. Это отдельный фактический лог, общий на всё сообщение, к XP не имеет отношения.`;
+- supplements: вытащи ВСЁ, что игрок принял (витамины, минералы, растения, лекарства, кофеин и т.п.), с дозой если она названа. Если ничего такого в тексте нет — верни пустой массив []. Это отдельный фактический лог, общий на всё сообщение, к XP не имеет отношения.
+- seed_detected: если в player_text заметен настоящий изъян, повторяющаяся трудность или что-то, что не получилось и стоит осмыслить отдельно — коротко сформулируй его. Не путай с обычным "не было настроения" — ищи содержательное для рефлексии. Если ничего такого нет — null. Это не влияет на matches и XP.
+- artifact_hint: если среди character_sheet.artifacts есть приём, реально уместный именно для этой ситуации — подскажи его. Не придумывай artifact_id, которого нет в списке. Если ничего подходящего или список пуст — null. Не подсказывай через силу.`;
 
 const GOAL_PLANNER_PROMPT = `Ты помогаешь разбить долгосрочную цель игрока на конкретные шаги для RPG-геймификации жизни.
 
@@ -430,7 +516,7 @@ const PLAN_REFINE_PROMPT = `Ты дорабатываешь ОДИН конкр�
 
 const BRAINSTORM_PROMPT = `Ты помогаешь игроку находить целесообразные следующие шаги в его RPG-геймификации жизни, видя контекст целиком.
 
-На первом сообщении диалога придёт JSON с полями: context (character_sheet с текущими уровнями по категориям, recent_history — последние события, active_goals — активные цели с шагами) и player_message — что игрок написал/спросил. На последующих сообщениях приходит просто текст игрока — используй контекст и историю диалога, переданные ранее.
+На первом сообщении диалога придёт JSON с полями: context (character_sheet с текущими уровнями по категориям и artifacts — уже проверенными приёмами игрока; recent_history — последние события; active_goals — активные цели с шагами; open_seeds — незакрытые затруднения, ожидающие исследования) и player_message — что игрок написал/спросил. На последующих сообщениях приходит просто текст игрока — используй контекст и историю диалога, переданные ранее.
 
 Верни СТРОГО JSON без текста до/после:
 {
@@ -441,11 +527,51 @@ const BRAINSTORM_PROMPT = `Ты помогаешь игроку находить
 }
 
 Правила:
-- Смотри на реальные сигналы: категория отстаёт по уровню относительно своего веса, застрявшие шаги в активных целях, давно не было записей в какой-то сфере.
+- Смотри на реальные сигналы: категория отстаёт по уровню относительно своего веса, застрявшие шаги в активных целях, давно не было записей в какой-то сфере, есть незакрытое зерно (open_seeds), которое давно ждёт.
+- Если уместно, можешь мягко напомнить про подходящий артефакт (уже проверенный приём) или про незакрытое зерно — но не навязывай, только если это правда в тему разговора.
 - 0-3 suggested_quests за раз, не вываливай много сразу.
 - Игрок может оспорить, попросить другое, сузить тему — веди себя как партнёр по обсуждению, а не как автомат, выдающий советы.
 - Не придумывай category_id, которых нет в context.
 - Если игрок просто рассуждает и конкретика не нужна — верни suggested_quests: [] и ответь по существу в message.`;
+
+const SEED_QUEST_PROMPT = `Ты помогаешь игроку исследовать через эксперимент один конкретный изъян/затруднение в рамках его личной RPG-геймификации жизни.
+
+Вход — JSON:
+{
+  "seed_text": "<описание затруднения>",
+  "category": { "id", "name", "weight" } | null,
+  "previous_attempt": { "approach": {label, description}, "result_text", "feedback" } | null
+}
+
+Верни СТРОГО JSON без текста до/после:
+{
+  "options": [
+    { "label": "<короткое название подхода, до 6 слов>", "description": "<конкретно что попробовать, 1-3 предложения>", "hypothesis": "<что должно измениться/произойти, если сработает>" }
+  ]
+}
+
+Правила:
+- 2-4 варианта, реально разных по сути, а не вариации одной идеи.
+- Каждый — то, что можно попробовать буквально в ближайшие дни, конкретное действие или эксперимент, а не абстрактный совет.
+- Если передан previous_attempt — не предлагай то же самое ещё раз; учти feedback и предложи другой угол.
+- Пиши простым языком, без канцелярита и мотивационных лозунгов.`;
+
+const SEED_VERDICT_PROMPT = `Ты оцениваешь результат эксперимента, который игрок провёл, пробуя подход к своему затруднению, в рамках личной RPG-геймификации жизни.
+
+Вход — JSON:
+{ "seed_text", "chosen_approach": {label, description, hypothesis}, "result_text" }
+
+Верни СТРОГО JSON без текста до/после:
+{
+  "verdict": "artifact | refine",
+  "artifact": { "name": "<короткое название приёма, как элемент инвентаря, до 5 слов>", "description": "<суть приёма и когда он полезен, 1-2 предложения, от третьего лица, чтобы потом можно было понять когда его рекомендовать>" } | null,
+  "feedback": "<честная, короткая реакция на результат>"
+}
+
+Правила:
+- verdict="artifact" — ТОЛЬКО если из result_text ясно следует реальный, ощутимый эффект. "Попробовал" — это не то же самое, что "сработало".
+- Если результат частичный, неоднозначный, или подход не сработал — verdict="refine", artifact=null. В feedback дай честное наблюдение, что стоит поменять — без развёрнутого плана, одна мысль.
+- Не придумывай успех, которого нет в тексте. Если игрок описывает провал — это refine, а не мягкая формулировка успеха.`;
 
 let state = {
   categories: [
@@ -457,7 +583,9 @@ let state = {
   ],
   history: [],
   goals: [],
-  supplements_log: []
+  supplements_log: [],
+  seeds: [],
+  artifacts: []
 };
 
 // XP/уровень категории — всегда ВЫЧИСЛЯЮТСЯ из history, никогда не хранятся напрямую.
@@ -631,7 +759,13 @@ async function callGameMaster(playerText) {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents: [{
       role: "user",
-      parts: [{ text: JSON.stringify({ character_sheet: { categories: state.categories }, player_text: playerText }) }]
+      parts: [{ text: JSON.stringify({
+        character_sheet: {
+          categories: state.categories,
+          artifacts: state.artifacts.map(a => ({ id: a.id, name: a.name, description: a.description }))
+        },
+        player_text: playerText
+      }) }]
     }],
     generationConfig: { responseMimeType: "application/json", temperature: 0 }
   };
@@ -670,6 +804,7 @@ async function handleSubmit() {
   statusEl.className = 'status';
   statusEl.textContent = 'Спрашиваю game master\'а...';
   clarifyEl.style.display = 'none';
+  document.getElementById('artifactHint').textContent = '';
 
   try {
     const result = await callGameMaster(text);
@@ -725,14 +860,43 @@ async function handleSubmit() {
       renderSupplements();
     }
 
+    if (result.seed_detected && result.seed_detected.text) {
+      state.seeds.push({
+        id: genId(),
+        text: result.seed_detected.text,
+        category_id: result.seed_detected.category_id || null,
+        source: 'auto',
+        status: 'open',
+        quest_options: [],
+        chosen_approach: null,
+        experiment_result: null,
+        verdict: null,
+        feedback: null,
+        artifact_id: null,
+        created_at: ts
+      });
+      renderSeeds();
+    }
+
     renderCategories();
     renderHistory();
     saveState();
     input.value = '';
     statusEl.className = 'status ok';
-    statusEl.textContent = skippedCats.length > 0
+    let summaryText = skippedCats.length > 0
       ? `Записано: ${summaryParts.join(', ')} (пропущено: ${skippedCats.join(', ')})`
       : `Записано: ${summaryParts.join(', ')}`;
+    if (result.seed_detected && result.seed_detected.text) {
+      summaryText += ` · 🌱 замечено зерно для рефлексии`;
+    }
+    statusEl.textContent = summaryText;
+
+    if (result.artifact_hint && result.artifact_hint.artifact_id) {
+      const art = state.artifacts.find(a => a.id === result.artifact_hint.artifact_id);
+      if (art) {
+        document.getElementById('artifactHint').textContent = `💡 Артефакт «${art.name}»: ${result.artifact_hint.note}`;
+      }
+    }
 
     if (document.getElementById('ghAutoSync').checked) {
       const ghStatus = document.getElementById('ghStatus');
@@ -834,12 +998,30 @@ function mergeGoals(localGoals, remoteGoals) {
   return Array.from(map.values());
 }
 
+// Зёрна — объединяем по id; если статусы разошлись, побеждает та версия, что дальше по циклу
+// (зерно → квест → эксперимент → решено), а не просто "последняя записанная".
+const SEED_STATUS_RANK = { open: 0, questing: 1, experimenting: 2, resolved: 3 };
+function mergeSeeds(localSeeds, remoteSeeds) {
+  const map = new Map();
+  (remoteSeeds || []).forEach(s => map.set(s.id, s));
+  (localSeeds || []).forEach(s => {
+    const existing = map.get(s.id);
+    if (!existing) { map.set(s.id, s); return; }
+    const localRank = SEED_STATUS_RANK[s.status] ?? 0;
+    const remoteRank = SEED_STATUS_RANK[existing.status] ?? 0;
+    map.set(s.id, localRank >= remoteRank ? s : existing);
+  });
+  return Array.from(map.values());
+}
+
 function mergeState(localState, remoteState) {
   return {
     categories: mergeCategories(localState.categories, remoteState.categories),
     history: mergeById(localState.history, remoteState.history),
     goals: mergeGoals(localState.goals, remoteState.goals),
-    supplements_log: mergeById(localState.supplements_log, remoteState.supplements_log)
+    supplements_log: mergeById(localState.supplements_log, remoteState.supplements_log),
+    seeds: mergeSeeds(localState.seeds, remoteState.seeds),
+    artifacts: mergeById(localState.artifacts, remoteState.artifacts)
   };
 }
 
@@ -863,6 +1045,8 @@ async function githubSaveState() {
     renderHistory();
     renderGoals();
     renderSupplements();
+    renderSeeds();
+    renderArtifacts();
     saveState();
   }
 
@@ -915,6 +1099,8 @@ async function githubLoadState() {
   renderHistory();
   renderGoals();
   renderSupplements();
+  renderSeeds();
+  renderArtifacts();
   saveState();
 
   ghStatus.className = 'status ok';
@@ -937,6 +1123,8 @@ function loadFromStorage() {
       if (parsed.categories) {
         parsed.goals = parsed.goals || [];
         parsed.supplements_log = parsed.supplements_log || [];
+        parsed.seeds = parsed.seeds || [];
+        parsed.artifacts = parsed.artifacts || [];
         state = parsed;
       }
     } catch (e) { /* ignore corrupt state, keep defaults */ }
@@ -1030,11 +1218,15 @@ document.getElementById('importFile').addEventListener('change', (e) => {
       if (!loaded.categories) throw new Error('bad shape');
       loaded.goals = loaded.goals || [];
       loaded.supplements_log = loaded.supplements_log || [];
+      loaded.seeds = loaded.seeds || [];
+      loaded.artifacts = loaded.artifacts || [];
       state = loaded;
       renderCategories();
       renderHistory();
       renderGoals();
       renderSupplements();
+      renderSeeds();
+      renderArtifacts();
       saveState();
     } catch (err) {
       alert('Не получилось прочитать файл — проверь, это тот же формат JSON.');
@@ -1059,7 +1251,9 @@ function buildBrainstormContext() {
     title: g.title, category_id: g.category_id,
     steps: g.steps.map(s => ({ text: s.text, status: s.status }))
   }));
-  return { character_sheet: { categories }, recent_history: recentHistory, active_goals: activeGoals };
+  const artifacts = state.artifacts.map(a => ({ id: a.id, name: a.name, description: a.description }));
+  const openSeeds = state.seeds.filter(s => s.status === 'open').map(s => ({ id: s.id, text: s.text }));
+  return { character_sheet: { categories, artifacts }, recent_history: recentHistory, active_goals: activeGoals, open_seeds: openSeeds };
 }
 
 async function callBrainstorm(userText) {
@@ -1519,6 +1713,352 @@ function wireGoalEvents() {
   });
 }
 
+/* ---------- Зёрна и артефакты ---------- */
+
+document.getElementById('seedSubmitBtn').addEventListener('click', () => {
+  const input = document.getElementById('seedInput');
+  const statusEl = document.getElementById('seedStatus');
+  const text = input.value.trim();
+  if (!text) return;
+
+  state.seeds.push({
+    id: genId(),
+    text: text,
+    category_id: null,
+    source: 'manual',
+    status: 'open',
+    quest_options: [],
+    chosen_approach: null,
+    experiment_result: null,
+    verdict: null,
+    feedback: null,
+    artifact_id: null,
+    created_at: new Date().toISOString()
+  });
+  input.value = '';
+  saveState();
+  renderSeeds();
+  statusEl.className = 'status ok';
+  statusEl.textContent = 'Сохранено.';
+  setTimeout(() => { statusEl.textContent = ''; }, 2000);
+});
+
+async function callSeedQuest(seed) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('modelName').value.trim();
+  if (!apiKey) throw new Error('Вставь API-ключ в настройках.');
+
+  const cat = state.categories.find(c => c.id === seed.category_id) || null;
+  const previousAttempt = seed.chosen_approach ? {
+    approach: { label: seed.chosen_approach.label, description: seed.chosen_approach.description },
+    result_text: seed.experiment_result,
+    feedback: seed.feedback
+  } : null;
+
+  const payload = {
+    systemInstruction: { parts: [{ text: SEED_QUEST_PROMPT }] },
+    contents: [{
+      role: "user",
+      parts: [{ text: JSON.stringify({
+        seed_text: seed.text,
+        category: cat ? { id: cat.id, name: cat.name, weight: cat.weight } : null,
+        previous_attempt: previousAttempt
+      }) }]
+    }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.5 }
+  };
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API вернул ошибку ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error('Пустой ответ от модели.');
+  return JSON.parse(raw);
+}
+
+async function callSeedVerdict(seed, resultText) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('modelName').value.trim();
+  if (!apiKey) throw new Error('Вставь API-ключ в настройках.');
+
+  const payload = {
+    systemInstruction: { parts: [{ text: SEED_VERDICT_PROMPT }] },
+    contents: [{
+      role: "user",
+      parts: [{ text: JSON.stringify({
+        seed_text: seed.text,
+        chosen_approach: seed.chosen_approach,
+        result_text: resultText
+      }) }]
+    }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
+  };
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API вернул ошибку ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error('Пустой ответ от модели.');
+  return JSON.parse(raw);
+}
+
+async function startSeedQuest(seedId) {
+  const seed = state.seeds.find(s => s.id === seedId);
+  if (!seed) return;
+  const btn = document.querySelector(`.seed-quest-btn[data-seed="${seedId}"]`);
+  const statusEl = document.querySelector(`.seed-status-note[data-seed="${seedId}"]`);
+  if (btn) btn.disabled = true;
+  if (statusEl) { statusEl.className = 'seed-status-note'; statusEl.textContent = 'Ищу варианты подходов...'; }
+
+  try {
+    const result = await callSeedQuest(seed);
+    seed.quest_options = result.options || [];
+    seed.status = 'questing';
+    seed.chosen_approach = null;
+    seed.experiment_result = null;
+    seed.verdict = null;
+    seed.feedback = null;
+    saveState();
+    renderSeeds();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    if (statusEl) { statusEl.className = 'seed-status-note err'; statusEl.textContent = e.message; }
+  }
+}
+
+function pickSeedOption(seedId, optionIndex) {
+  const seed = state.seeds.find(s => s.id === seedId);
+  if (!seed) return;
+  const option = seed.quest_options[optionIndex];
+  if (!option) return;
+  seed.chosen_approach = option;
+  seed.status = 'experimenting';
+  seed.experiment_result = null;
+  seed.verdict = null;
+  seed.feedback = null;
+  saveState();
+  renderSeeds();
+}
+
+async function submitSeedResult(seedId) {
+  const seed = state.seeds.find(s => s.id === seedId);
+  if (!seed) return;
+  const textarea = document.querySelector(`.seed-result-input[data-seed="${seedId}"]`);
+  const btn = document.querySelector(`.seed-result-btn[data-seed="${seedId}"]`);
+  const statusEl = document.querySelector(`.seed-status-note[data-seed="${seedId}"]`);
+  const resultText = textarea.value.trim();
+  if (!resultText) return;
+
+  btn.disabled = true;
+  if (statusEl) { statusEl.className = 'seed-status-note'; statusEl.textContent = 'Оцениваю результат...'; }
+
+  try {
+    const verdict = await callSeedVerdict(seed, resultText);
+    seed.experiment_result = resultText;
+    seed.feedback = verdict.feedback || null;
+
+    if (verdict.verdict === 'artifact' && verdict.artifact) {
+      const artifact = {
+        id: genId(),
+        name: verdict.artifact.name,
+        description: verdict.artifact.description,
+        category_id: seed.category_id,
+        source_seed_id: seed.id,
+        created_at: new Date().toISOString()
+      };
+      state.artifacts.push(artifact);
+      seed.verdict = 'artifact';
+      seed.artifact_id = artifact.id;
+      seed.status = 'resolved';
+      renderArtifacts();
+    } else {
+      seed.verdict = 'refine';
+    }
+
+    saveState();
+    renderSeeds();
+  } catch (e) {
+    btn.disabled = false;
+    if (statusEl) { statusEl.className = 'seed-status-note err'; statusEl.textContent = e.message; }
+  }
+}
+
+function requestOtherSeedOptions(seedId) {
+  startSeedQuest(seedId);
+}
+
+function deleteSeed(seedId) {
+  if (!confirm('Удалить это зерно? Действие нельзя отменить.')) return;
+  state.seeds = state.seeds.filter(s => s.id !== seedId);
+  saveState();
+  renderSeeds();
+}
+
+function deleteArtifact(artifactId) {
+  if (!confirm('Удалить этот артефакт?')) return;
+  state.artifacts = state.artifacts.filter(a => a.id !== artifactId);
+  saveState();
+  renderArtifacts();
+}
+
+function renderSeeds() {
+  const el = document.getElementById('seeds');
+  if (!state.seeds || state.seeds.length === 0) {
+    el.innerHTML = `<div class="empty">Пока нет сохранённых зёрен — пиши сюда затруднения своими словами, или они появятся сами, когда ИИ заметит что-то в обычной записи.</div>`;
+    return;
+  }
+
+  const order = { experimenting: 0, questing: 1, open: 2, resolved: 3 };
+  const sorted = state.seeds.slice().sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+  el.innerHTML = sorted.map(s => {
+    const cat = state.categories.find(c => c.id === s.category_id);
+    const catTag = cat ? `<span class="seed-tag">${cat.name}</span>` : '';
+    const sourceTag = `<span class="seed-tag">${s.source === 'auto' ? 'замечено ИИ' : 'вручную'}</span>`;
+
+    if (s.status === 'open') {
+      return `
+        <div class="seed">
+          <div class="seed-top">
+            <div>
+              <div class="seed-text">${escapeAttr(s.text)}</div>
+              <div class="seed-meta">${catTag}${sourceTag}</div>
+            </div>
+            <span class="seed-del" data-seed="${s.id}">×</span>
+          </div>
+          <button class="seed-quest-btn" data-seed="${s.id}">Начать квест-исследование</button>
+          <div class="seed-status-note" data-seed="${s.id}"></div>
+        </div>`;
+    }
+
+    if (s.status === 'questing') {
+      const optionsHtml = s.quest_options.map((opt, idx) => `
+        <div class="seed-opt">
+          <div class="seed-opt-label">${escapeAttr(opt.label)}</div>
+          <div class="seed-opt-desc">${escapeAttr(opt.description)}</div>
+          <div class="seed-opt-hyp">Если сработает: ${escapeAttr(opt.hypothesis)}</div>
+          <button class="seed-opt-pick" data-seed="${s.id}" data-option="${idx}">Выбрать этот подход</button>
+        </div>
+      `).join('');
+      return `
+        <div class="seed">
+          <div class="seed-top">
+            <div>
+              <div class="seed-text">${escapeAttr(s.text)}</div>
+              <div class="seed-meta">${catTag}${sourceTag}</div>
+            </div>
+            <span class="seed-del" data-seed="${s.id}">×</span>
+          </div>
+          ${optionsHtml}
+          <div class="seed-status-note" data-seed="${s.id}"></div>
+        </div>`;
+    }
+
+    if (s.status === 'experimenting') {
+      const feedbackHtml = s.verdict === 'refine' && s.feedback ? `
+        <div class="seed-feedback">
+          <div>${escapeAttr(s.feedback)}</div>
+          <button class="seed-other-opts-btn" data-seed="${s.id}">Другие варианты</button>
+        </div>
+      ` : '';
+      return `
+        <div class="seed">
+          <div class="seed-top">
+            <div>
+              <div class="seed-text">${escapeAttr(s.text)}</div>
+              <div class="seed-meta">${catTag}${sourceTag}</div>
+            </div>
+            <span class="seed-del" data-seed="${s.id}">×</span>
+          </div>
+          <div class="seed-approach-box">
+            <div class="seed-approach-label">${escapeAttr(s.chosen_approach.label)}</div>
+            <div class="seed-approach-desc">${escapeAttr(s.chosen_approach.description)}</div>
+            <div class="seed-approach-hyp">Если сработает: ${escapeAttr(s.chosen_approach.hypothesis)}</div>
+          </div>
+          ${feedbackHtml}
+          <textarea class="seed-result-input" data-seed="${s.id}" placeholder="Что получилось? Опиши результат эксперимента"></textarea>
+          <button class="seed-result-btn" data-seed="${s.id}">Записать результат</button>
+          <div class="seed-status-note" data-seed="${s.id}"></div>
+        </div>`;
+    }
+
+    // resolved
+    const artifact = state.artifacts.find(a => a.id === s.artifact_id);
+    return `
+      <div class="seed" style="opacity:0.75;">
+        <div class="seed-top">
+          <div>
+            <div class="seed-text">${escapeAttr(s.text)}</div>
+            <div class="seed-meta">${catTag}${sourceTag}<span class="seed-tag">решено</span></div>
+          </div>
+          <span class="seed-del" data-seed="${s.id}">×</span>
+        </div>
+        ${artifact ? `<div class="seed-artifact-link">🏺 Получен артефакт: «${escapeAttr(artifact.name)}»</div>` : ''}
+      </div>`;
+  }).join('');
+
+  wireSeedEvents();
+}
+
+function wireSeedEvents() {
+  const el = document.getElementById('seeds');
+  el.querySelectorAll('.seed-del').forEach(x => {
+    x.addEventListener('click', () => deleteSeed(x.dataset.seed));
+  });
+  el.querySelectorAll('.seed-quest-btn').forEach(btn => {
+    btn.addEventListener('click', () => startSeedQuest(btn.dataset.seed));
+  });
+  el.querySelectorAll('.seed-opt-pick').forEach(btn => {
+    btn.addEventListener('click', () => pickSeedOption(btn.dataset.seed, parseInt(btn.dataset.option, 10)));
+  });
+  el.querySelectorAll('.seed-result-btn').forEach(btn => {
+    btn.addEventListener('click', () => submitSeedResult(btn.dataset.seed));
+  });
+  el.querySelectorAll('.seed-other-opts-btn').forEach(btn => {
+    btn.addEventListener('click', () => requestOtherSeedOptions(btn.dataset.seed));
+  });
+}
+
+function renderArtifacts() {
+  const el = document.getElementById('artifacts');
+  if (!state.artifacts || state.artifacts.length === 0) {
+    el.innerHTML = `<div class="empty">Пока нет артефактов — они появятся, когда эксперимент по зерну даст реальный результат.</div>`;
+    return;
+  }
+  el.innerHTML = state.artifacts.map(a => {
+    const cat = state.categories.find(c => c.id === a.category_id);
+    return `
+      <div class="artifact">
+        <div class="seed-top">
+          <div>
+            <div class="artifact-name">🏺 ${escapeAttr(a.name)}</div>
+            <div class="artifact-desc">${escapeAttr(a.description)}</div>
+            <div class="artifact-meta">${cat ? cat.name + ' · ' : ''}${new Date(a.created_at).toLocaleDateString()}</div>
+          </div>
+          <span class="artifact-del" data-artifact="${a.id}">×</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  el.querySelectorAll('.artifact-del').forEach(x => {
+    x.addEventListener('click', () => deleteArtifact(x.dataset.artifact));
+  });
+}
+
 /* ---------- Библиотека мотиваторов ---------- */
 // Каждый мотиватор честно отражает механизм, а не преувеличивает исход.
 // source — техника/автор, на которой формулировка держится, не декоративная подпись.
@@ -1612,6 +2152,8 @@ renderCategories();
 renderHistory();
 renderGoals();
 renderSupplements();
+renderSeeds();
+renderArtifacts();
 renderBrainstorm();
 </script>
 </body>
