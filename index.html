@@ -2147,6 +2147,38 @@ function showNextCategoryMotivator(catId, motEl) {
 setInterval(rotateSideMotivators, 60000);
 setTimeout(rotateSideMotivators, 400);
 
+async function autoSyncOnLoad() {
+  const cfg = getGhConfig();
+  if (!cfg.token || !cfg.repo) return; // ничего не настроено — нечего подтягивать
+
+  const ghStatus = document.getElementById('ghStatus');
+  ghStatus.className = 'status';
+  ghStatus.textContent = 'Проверяю свежую версию на GitHub...';
+
+  try {
+    const file = await githubFetchFile(cfg);
+    if (!file) {
+      ghStatus.textContent = '';
+      return; // файла ещё нет в репозитории — сохранится при первом "Сохранить"
+    }
+    const decoded = fromBase64Unicode(file.content.replace(/\n/g, ''));
+    const remoteState = JSON.parse(decoded);
+    state = mergeState(state, remoteState);
+    renderCategories();
+    renderHistory();
+    renderGoals();
+    renderSupplements();
+    renderSeeds();
+    renderArtifacts();
+    saveState();
+    ghStatus.className = 'status ok';
+    ghStatus.textContent = `Синхронизировано при загрузке (${new Date().toLocaleTimeString()})`;
+  } catch (e) {
+    ghStatus.className = 'status err';
+    ghStatus.textContent = `Не удалось автоматически свериться с GitHub: ${e.message}`;
+  }
+}
+
 loadFromStorage();
 renderCategories();
 renderHistory();
@@ -2155,6 +2187,7 @@ renderSupplements();
 renderSeeds();
 renderArtifacts();
 renderBrainstorm();
+autoSyncOnLoad();
 </script>
 </body>
 </html>
